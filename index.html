@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hanzi Drill</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>汉字 <span>Hanzi Drill</span></h1>
+    <div class="row" id="userBar"></div>
+  </header>
+
+  <!-- Login / profiles -->
+  <section class="panel hidden" id="screenLogin">
+    <h2 class="sec">Who's practicing?</h2>
+    <div class="profiles" id="profileList"></div>
+    <div id="pwPrompt" class="row hidden" style="margin-bottom:10px">
+      <span id="pwFor"></span>
+      <input type="password" id="pwInput" placeholder="Password" autocomplete="current-password">
+      <button class="primary" id="pwGo">Log in</button>
+      <button id="pwCancel">Cancel</button>
+    </div>
+    <details id="newProfile" style="margin-top:6px">
+      <summary style="cursor:pointer">Create a new profile</summary>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="npName" placeholder="Name" maxlength="30" autocomplete="off">
+        <input type="password" id="npPw" placeholder="Password (optional)" autocomplete="new-password">
+        <button class="primary" id="npGo">Create</button>
+      </div>
+    </details>
+    <div class="row" style="margin-top:12px">
+      <label class="btn">Import profile file (.json)<input type="file" id="importFile" accept=".json,application/json"></label>
+    </div>
+    <div class="err" id="loginErr"></div>
+    <p class="note">Profiles and progress are saved in this browser on this device. Use <b>Export</b> to save a backup file or move a profile to another device with <b>Import</b>. Passwords only keep casual users out of your profile; they are not strong security.</p>
+  </section>
+
+  <!-- Home: list picker + progress -->
+  <div id="screenHome" class="hidden">
+    <section class="panel" aria-label="Setup">
+      <div class="row sp">
+        <div class="row">
+          <select id="listSel" aria-label="Vocab list"></select>
+          <button id="listDel" title="Delete this list">Delete</button>
+        </div>
+        <label class="btn">Upload vocab (.docx)<input type="file" id="file" accept=".docx" multiple></label>
+      </div>
+      <div class="chips" id="sections" style="margin-top:12px" role="group" aria-label="Sections"></div>
+      <div class="row sp" style="margin-top:12px">
+        <div class="row">
+          <select id="optMode" aria-label="Which words">
+            <option value="all">All words</option>
+            <option value="weak">Words I haven't mastered</option>
+          </select>
+          <label class="opt"><input type="checkbox" id="optShuffle"> Shuffle</label>
+          <label class="opt"><input type="checkbox" id="optPinyin"> Show pinyin</label>
+        </div>
+        <button class="primary" id="start">Start drill</button>
+      </div>
+      <div class="sub" id="deckInfo" style="margin-top:8px"></div>
+      <div class="err" id="loadErr"></div>
+    </section>
+    <section class="panel" id="progressPanel"></section>
+  </div>
+
+  <!-- Drill -->
+  <section class="panel stage hidden" id="stage" aria-live="polite">
+    <div class="progress"><span id="pCount" class="stat"></span><span id="pScore" class="stat"></span></div>
+    <div class="bar"><i id="pBar"></i></div>
+    <div class="sub" id="secTag"></div>
+    <div class="prompt" id="prompt"></div>
+    <div class="hint" id="hint"></div>
+    <div class="boxes" id="boxes"></div>
+    <div class="live" id="live"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="actions">
+      <button id="bHint">Hint (3)</button>
+      <button id="bReveal">Show answer</button>
+      <button id="bRetry">Redraw</button>
+      <button id="bSkip">Skip</button>
+      <button id="bNext" class="primary hidden">Next →</button>
+      <button id="bQuit">End session</button>
+    </div>
+    <p class="sub" style="margin:14px 0 0">Draw each stroke in order. You get 3 hints per word; each shows only the next stroke.</p>
+  </section>
+
+  <section class="panel summary hidden" id="summary"></section>
+</div>
+
+<script src="vendor/hanzi-writer.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
