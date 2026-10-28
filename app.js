@@ -5,35 +5,38 @@
    ===================================================================== */
 const $ = id => document.getElementById(id);
 const CJK = /[㐀-鿿]/;
-const STORE_KEY = "hanziDrill.v1";
+const STORE_KEY = "hanziDrill.v2";
 const HINTS_PER_WORD = 3;
 const MASTER_STREAK = 2;           // clean results in a row to count a word as "mastered"
 
-/* ---------------- Storage ---------------- */
-let db = { profiles: {}, lastProfile: null };
-let storageOK = true;
-
-function loadDB(){
+/* ---------------- Storage (this browser only) ---------------- */
+const OLD_KEY = "hanziDrill.v1";          // earlier multi-profile version
+function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null }, progress:{}, sessions:[] }; }
+function mergeState(src){
+  const st = freshState();
+  if(src && typeof src==="object"){
+    Object.assign(st.settings, src.settings||{});
+    st.progress = src.progress || {}; st.sessions = src.sessions || [];
+  }
+  return st;
+}
+function loadState(){
   try{
     const raw = localStorage.getItem(STORE_KEY);
-    if(raw){ const d = JSON.parse(raw); if(d && d.profiles) db = d; }
-  }catch(e){ storageOK = false; }
+    if(raw) return mergeState(JSON.parse(raw));
+    const old = JSON.parse(localStorage.getItem(OLD_KEY) || "null");       // carry over progress from the profile version
+    if(old && old.profiles){
+      const ps = Object.values(old.profiles);
+      const p = old.profiles[old.lastProfile] || ps[0];
+      if(p) return mergeState(p);
+    }
+  }catch(e){}
+  return freshState();
 }
 function saveDB(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(db)); storageOK = true; }
-  catch(e){ storageOK = false; $("loadErr").textContent = "Couldn't save to this browser's storage. Use Export to keep your data."; }
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(profile)); }
+  catch(e){ $("loadErr").textContent = "Couldn't save to this browser's storage. Use Export to keep your progress."; }
 }
-const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id" + Date.now().toString(36) + Math.random().toString(36).slice(2));
-
-/* ---------------- Passwords (optional) ---------------- */
-const enc = new TextEncoder();
-const toB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
-async function hashPw(pw, saltB64){
-  const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveBits"]);
-  return toB64(await crypto.subtle.deriveBits({name:"PBKDF2", salt, iterations:100000, hash:"SHA-256"}, key, 256));
-}
-const newSalt = () => toB64(crypto.getRandomValues(new Uint8Array(16)));
 
 /* ---------------- Vocab parsing ---------------- */
 async function docxToLines(arrayBuffer){
@@ -103,113 +106,92 @@ function playSound(kind){
 }
 
 /* ---------------- State ---------------- */
-let profile = null;          // current profile object (inside db.profiles)
+let profile = loadState();   // { settings, progress, sessions } — saved in this browser
 let curList = null;          // selected list object
 let activeSections = new Set();
 let deck = [], idx = 0, sess, writers = [], boxEls = [], charIdx = 0, finished = false, itemState = null;
 const charData = {};         // cache of hanzi-writer char data
 
+/* ---------------- Shared (built-in) lists: files in /lists ---------------- */
+let sharedLists = [];
+async function discoverListFiles(){
+  const found = new Map();                      // file -> display name
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+  if(m){                                        // auto-detect any .docx you drop into the repo's lists/ folder
+    const owner = m[1], seg = location.pathname.split("/")[1];
+    const repo = seg && !/\.html?$/i.test(seg) ? seg : owner + ".github.io";
+    try{
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/lists`);
+      if(r.ok) for(const f of await r.json()) if(f.type==="file" && /\.docx$/i.test(f.name)) found.set(f.name, null);
+    }catch(e){}
+  }
+  try{                                          // manifest (works anywhere, and as a fallback)
+    const r = await fetch("lists/manifest.json", {cache:"no-cache"});
+    if(r.ok) for(const e of (await r.json()).lists||[]) found.set(e.file, e.name || found.get(e.file) || null);
+  }catch(e){}
+  return found;
+}
+async function loadSharedLists(){
+  const out = [];
+  try{
+    const files = await discoverListFiles();
+    await Promise.all([...files].map(async ([file, name]) => {
+      try{
+        const r = await fetch("lists/" + encodeURIComponent(file)); if(!r.ok) return;
+        const items = parseVocab(await docxToLines(await r.arrayBuffer()));
+        if(items.length) out.push({ id:"shared:"+file, shared:true, name: name || file.replace(/\.docx$/i,"").replace(/_/g," "), items });
+      }catch(e){}
+    }));
+  }catch(e){}
+  if(!out.length){                              // offline / opened from disk: fall back to the embedded L3 list
+    try{ out.push({ id:"shared:builtin", shared:true, name:DEFAULT_LIST_NAME, items: parseVocab(await docxToLines(b64ToBuf(DEFAULT_DOCX_B64))) }); }catch(e){}
+  }
+  sharedLists = out.sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
+}
+function allLists(){ return sharedLists; }
+
 /* ---------------- Screens ---------------- */
 function show(which){
-  ["screenLogin","screenHome","stage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
+  ["screenHome","stage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
   renderUserBar();
 }
 function renderUserBar(){
-  const bar = $("userBar");
-  if(!profile){ bar.innerHTML = ""; return; }
-  bar.innerHTML = `<span class="sub">Signed in as <b>${esc(profile.name)}</b></span>
-    <button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"🔔 Sound on":"🔕 Sound off"}</button>
-    <button id="ubExport">Export</button><button id="ubOut">Log out</button>`;
+  $("userBar").innerHTML = `<button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"🔔 Sound on":"🔕 Sound off"}</button>
+    <button id="ubExport" title="Download a backup of your progress">Export</button>
+    <label class="btn" title="Restore progress from a backup file">Import<input type="file" id="importFile" accept=".json,application/json"></label>`;
   $("ubSound").onclick = () => { profile.settings.sound = !profile.settings.sound; saveDB(); renderUserBar(); if(profile.settings.sound) playSound("clean"); };
-  $("ubExport").onclick = exportProfile;
-  $("ubOut").onclick = logout;
+  $("ubExport").onclick = exportProgress;
+  $("importFile").onchange = e => { if(e.target.files[0]) importProgress(e.target.files[0]); e.target.value = ""; };
 }
 
-/* ---------------- Login screen ---------------- */
-let pendingLogin = null;
-function renderLogin(){
-  profile = null; renderUserBar();
-  const list = $("profileList"); list.innerHTML = "";
-  const ps = Object.values(db.profiles).sort((a,b)=>(a.created||0)-(b.created||0));
-  if(!ps.length) list.innerHTML = `<div class="sub">No profiles yet — create one below.</div>`;
-  ps.forEach(p => {
-    const b = document.createElement("button"); b.className = "pcard";
-    const words = Object.keys(p.progress||{}).length;
-    b.innerHTML = `<b>${esc(p.name)}${p.hash?" 🔒":""}</b><small>${words} word${words===1?"":"s"} practiced</small>`;
-    b.onclick = () => beginLogin(p);
-    list.appendChild(b);
-  });
-  $("pwPrompt").classList.add("hidden"); $("loginErr").textContent = "";
-  show("screenLogin");
-}
-function beginLogin(p){
-  if(!p.hash) return enterProfile(p);
-  pendingLogin = p; $("pwFor").textContent = `Password for ${p.name}:`; $("pwInput").value = "";
-  $("pwPrompt").classList.remove("hidden"); $("loginErr").textContent = ""; $("pwInput").focus();
-}
-async function tryPw(){
-  const p = pendingLogin; if(!p) return;
-  try{
-    if(await hashPw($("pwInput").value, p.salt) === p.hash){ pendingLogin = null; enterProfile(p); }
-    else $("loginErr").textContent = "Wrong password.";
-  }catch(e){ $("loginErr").textContent = "Password check isn't available in this browser."; }
-}
-async function createProfile(){
-  const name = $("npName").value.trim(), pw = $("npPw").value;
-  if(!name) return $("loginErr").textContent = "Enter a name.";
-  if(Object.values(db.profiles).some(p=>p.name.toLowerCase()===name.toLowerCase())) return $("loginErr").textContent = "That name is already taken.";
-  const p = { id: uid(), name, created: Date.now(), salt:null, hash:null,
-    settings:{ sound:true, shuffle:true, pinyin:false }, lists:[], progress:{}, sessions:[] };
-  if(pw){
-    try{ p.salt = newSalt(); p.hash = await hashPw(pw, p.salt); }
-    catch(e){ return $("loginErr").textContent = "Passwords aren't supported in this browser; leave it blank."; }
-  }
-  try{ p.lists.push({ id:uid(), name:DEFAULT_LIST_NAME, added:Date.now(), items: parseVocab(await docxToLines(b64ToBuf(DEFAULT_DOCX_B64))) }); }catch(e){}
-  db.profiles[p.id] = p; saveDB();
-  $("npName").value = $("npPw").value = ""; $("newProfile").open = false;
-  enterProfile(p);
-}
-function enterProfile(p){
-  profile = p; db.lastProfile = p.id; saveDB();
-  $("optShuffle").checked = p.settings.shuffle; $("optPinyin").checked = p.settings.pinyin;
-  $("loadErr").textContent = "";
-  curList = p.lists.find(l=>l.id===p.settings.lastList) || p.lists[0] || null;
-  renderHome();
-}
-function logout(){ if(sess && !$("stage").classList.contains("hidden")) endSession(true); renderLogin(); }
-
-/* ---------------- Export / import ---------------- */
-function download(name, text){
+/* ---------------- Export / import (backup file) ---------------- */
+function exportProgress(){
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], {type:"application/json"})); a.download = name;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ format:"hanzi-drill-progress", version:1, exported:new Date().toISOString(), data:profile }, null, 1)], {type:"application/json"}));
+  a.download = "hanzi-drill-progress.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
-function exportProfile(){
-  download(`hanzi-drill-${profile.name.replace(/\W+/g,"_")}.json`,
-    JSON.stringify({ format:"hanzi-drill-profile", version:1, exported:new Date().toISOString(), profile }, null, 1));
-}
-async function importProfile(file){
+async function importProgress(file){
   try{
     const d = JSON.parse(await file.text());
-    if(d.format!=="hanzi-drill-profile" || !d.profile || !d.profile.name) throw new Error("Not a Hanzi Drill profile file.");
-    const p = d.profile; p.lists = p.lists||[]; p.progress = p.progress||{}; p.sessions = p.sessions||[];
-    p.settings = Object.assign({sound:true,shuffle:true,pinyin:false}, p.settings);
-    const same = Object.values(db.profiles).find(x=>x.name.toLowerCase()===p.name.toLowerCase());
-    if(same){
-      if(confirm(`A profile named "${same.name}" already exists here. Replace it with the imported one?\n(Cancel imports it as a separate copy.)`)){ delete db.profiles[same.id]; p.id = same.id; }
-      else { p.id = uid(); p.name += " (imported)"; }
-    } else if(!p.id || db.profiles[p.id]) p.id = uid();
-    db.profiles[p.id] = p; saveDB(); renderLogin();
-    $("loginErr").textContent = "";
-  }catch(e){ $("loginErr").textContent = "Couldn't import: " + e.message; }
+    if(d.format!=="hanzi-drill-progress" || !d.data) throw new Error("Not a Hanzi Drill progress file.");
+    if(!confirm("Replace the progress saved in this browser with the contents of this file?")) return;
+    profile = mergeState(d.data); saveDB();
+    $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
+    renderHome(); $("loadErr").textContent = "";
+  }catch(e){ $("loadErr").textContent = "Couldn't import: " + e.message; }
+}
+function resetProgress(){
+  if(!confirm("Erase all saved progress in this browser? This can't be undone (Export first if you want a backup).")) return;
+  const keep = profile.settings; profile = freshState(); profile.settings = keep; saveDB(); renderHome();
 }
 
 /* ---------------- Home: lists, sections, progress ---------------- */
 function renderHome(){
   const sel = $("listSel"); sel.innerHTML = "";
-  profile.lists.forEach(l => { const o = document.createElement("option"); o.value = l.id; o.textContent = `${l.name} (${l.items.length})`; sel.appendChild(o); });
+  const al = allLists();
+  if(!curList || !al.includes(curList)) curList = al.find(l=>curList && l.id===curList.id) || al.find(l=>l.id===profile.settings.lastList) || al[0] || null;
+  al.forEach(l => { const o = document.createElement("option"); o.value = l.id; o.textContent = `${l.name} (${l.items.length})`; sel.appendChild(o); });
   if(curList) sel.value = curList.id;
-  $("listDel").disabled = !curList;
   const secs = curList ? [...new Set(curList.items.map(i=>i.section))] : [];
   activeSections = new Set(secs);
   const box = $("sections"); box.innerHTML = "";
@@ -260,23 +242,6 @@ function renderProgress(){
     <div class="words">${chips}</div>
     <div class="legend"><span>■ green: mastered (${MASTER_STREAK} clean in a row)</span><span>■ yellow: last time used hints</span><span>■ red: last time missed</span><span>□ not practiced / in progress</span></div>
     <div style="margin-top:10px">${recent}</div>`;
-}
-
-async function addFiles(files){
-  const errs = [];
-  for(const f of files){
-    try{
-      const items = parseVocab(await docxToLines(await f.arrayBuffer()));
-      if(!items.length) throw new Error("no Chinese vocabulary lines found");
-      let name = f.name.replace(/\.docx$/i,""), base = name, n = 2;
-      while(profile.lists.some(l=>l.name===name)) name = `${base} (${n++})`;
-      const l = { id:uid(), name, added:Date.now(), items };
-      profile.lists.push(l); curList = l;
-    }catch(e){ errs.push(`${f.name}: ${e.message}`); }
-  }
-  if(curList) profile.settings.lastList = curList.id;
-  saveDB(); renderHome();
-  $("loadErr").textContent = errs.length ? "Couldn't read " + errs.join("; ") : "";
 }
 
 /* ---------------- Drill ---------------- */
@@ -456,17 +421,7 @@ function endSession(silent){
 }
 
 /* ---------------- Wire up ---------------- */
-$("npGo").onclick = createProfile;
-$("npName").onkeydown = $("npPw").onkeydown = e => { if(e.key==="Enter") createProfile(); };
-$("pwGo").onclick = tryPw; $("pwInput").onkeydown = e => { if(e.key==="Enter") tryPw(); };
-$("pwCancel").onclick = () => { pendingLogin = null; $("pwPrompt").classList.add("hidden"); $("loginErr").textContent = ""; };
-$("importFile").onchange = e => { if(e.target.files[0]) importProfile(e.target.files[0]); e.target.value = ""; };
-$("file").onchange = e => { if(e.target.files.length) addFiles([...e.target.files]); e.target.value = ""; };
-$("listSel").onchange = e => { curList = profile.lists.find(l=>l.id===e.target.value); profile.settings.lastList = curList.id; saveDB(); renderHome(); };
-$("listDel").onclick = () => {
-  if(!curList || !confirm(`Delete the list "${curList.name}"? (Your progress on its words is kept.)`)) return;
-  profile.lists = profile.lists.filter(l=>l!==curList); curList = profile.lists[0] || null; saveDB(); renderHome();
-};
+$("listSel").onchange = e => { curList = allLists().find(l=>l.id===e.target.value); profile.settings.lastList = curList.id; saveDB(); renderHome(); };
 $("optMode").onchange = updateDeckInfo;
 $("optShuffle").onchange = () => { profile.settings.shuffle = $("optShuffle").checked; saveDB(); };
 $("optPinyin").onchange = () => { profile.settings.pinyin = $("optPinyin").checked; saveDB();
@@ -476,5 +431,7 @@ $("bHint").onclick = useHint; $("bReveal").onclick = reveal; $("bRetry").onclick
 $("bSkip").onclick = skip; $("bNext").onclick = next; $("bQuit").onclick = () => endSession(false);
 document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("bNext").classList.contains("hidden") && document.activeElement.tagName!=="BUTTON" && document.activeElement.tagName!=="INPUT") next(); });
 
-loadDB();
-renderLogin();
+$("resetBtn").onclick = resetProgress;
+$("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
+renderHome();                                   // shows the page immediately; lists fill in once loaded
+loadSharedLists().then(() => { if(!$("screenHome").classList.contains("hidden")) renderHome(); });

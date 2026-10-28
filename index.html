@@ -13,40 +13,11 @@
     <div class="row" id="userBar"></div>
   </header>
 
-  <!-- Login / profiles -->
-  <section class="panel hidden" id="screenLogin">
-    <h2 class="sec">Who's practicing?</h2>
-    <div class="profiles" id="profileList"></div>
-    <div id="pwPrompt" class="row hidden" style="margin-bottom:10px">
-      <span id="pwFor"></span>
-      <input type="password" id="pwInput" placeholder="Password" autocomplete="current-password">
-      <button class="primary" id="pwGo">Log in</button>
-      <button id="pwCancel">Cancel</button>
-    </div>
-    <details id="newProfile" style="margin-top:6px">
-      <summary style="cursor:pointer">Create a new profile</summary>
-      <div class="row" style="margin-top:10px">
-        <input type="text" id="npName" placeholder="Name" maxlength="30" autocomplete="off">
-        <input type="password" id="npPw" placeholder="Password (optional)" autocomplete="new-password">
-        <button class="primary" id="npGo">Create</button>
-      </div>
-    </details>
-    <div class="row" style="margin-top:12px">
-      <label class="btn">Import profile file (.json)<input type="file" id="importFile" accept=".json,application/json"></label>
-    </div>
-    <div class="err" id="loginErr"></div>
-    <p class="note">Profiles and progress are saved in this browser on this device. Use <b>Export</b> to save a backup file or move a profile to another device with <b>Import</b>. Passwords only keep casual users out of your profile; they are not strong security.</p>
-  </section>
-
   <!-- Home: list picker + progress -->
   <div id="screenHome" class="hidden">
     <section class="panel" aria-label="Setup">
       <div class="row sp">
-        <div class="row">
-          <select id="listSel" aria-label="Vocab list"></select>
-          <button id="listDel" title="Delete this list">Delete</button>
-        </div>
-        <label class="btn">Upload vocab (.docx)<input type="file" id="file" accept=".docx" multiple></label>
+        <select id="listSel" aria-label="Vocab list"></select>
       </div>
       <div class="chips" id="sections" style="margin-top:12px" role="group" aria-label="Sections"></div>
       <div class="row sp" style="margin-top:12px">
@@ -64,6 +35,7 @@
       <div class="err" id="loadErr"></div>
     </section>
     <section class="panel" id="progressPanel"></section>
+    <div style="text-align:center"><button id="resetBtn" class="danger" style="font-size:13px">Reset progress</button></div>
   </div>
 
   <!-- Drill -->
