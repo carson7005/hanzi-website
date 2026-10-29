@@ -84,3 +84,5 @@ h2.sec{font:600 16px Georgia,serif;margin:0 0 8px}
 .row.sp{justify-content:space-between}
 .danger{color:var(--bad)}
 .note{font-size:12px;color:var(--muted)}
+
+.verdict.info{background:var(--bg);border:1px solid var(--line);color:var(--ink)}

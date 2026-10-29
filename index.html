@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hanzi Drill</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <div class="wrap">
@@ -23,8 +23,9 @@
       <div class="row sp" style="margin-top:12px">
         <div class="row">
           <select id="optMode" aria-label="Which words">
-            <option value="all">All words</option>
+            <option value="all">All words (new ones taught first)</option>
             <option value="weak">Words I haven't mastered</option>
+            <option value="learn">Learn new words only</option>
           </select>
           <label class="opt"><input type="checkbox" id="optShuffle"> Shuffle</label>
           <label class="opt"><input type="checkbox" id="optPinyin"> Show pinyin</label>
@@ -51,12 +52,13 @@
     <div class="actions">
       <button id="bHint">Hint (3)</button>
       <button id="bReveal">Show answer</button>
+      <button id="bReplay" class="hidden">Replay</button>
       <button id="bRetry">Redraw</button>
       <button id="bSkip">Skip</button>
       <button id="bNext" class="primary hidden">Next →</button>
       <button id="bQuit">End session</button>
     </div>
-    <p class="sub" style="margin:14px 0 0">Draw each stroke in order. You get 3 hints per word; each shows only the next stroke.</p>
+    <p class="sub" id="stageNote" style="margin:14px 0 0">Draw each stroke in order. You get 3 hints per word; each shows only the next stroke.</p>
   </section>
 
   <section class="panel summary hidden" id="summary"></section>
@@ -64,7 +66,7 @@
 
 <script src="vendor/hanzi-writer.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
-<script src="data.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="data.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

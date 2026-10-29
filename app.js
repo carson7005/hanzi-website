@@ -110,6 +110,9 @@ let profile = loadState();   // { settings, progress, sessions } — saved in th
 let curList = null;          // selected list object
 let activeSections = new Set();
 let deck = [], idx = 0, sess, writers = [], boxEls = [], charIdx = 0, finished = false, itemState = null;
+let learnStage = null, watchToken = 0;   // learnStage: null = normal drill, 0 watch / 1 trace / 2 copy
+const BATCH = 5;                  // new words taught per batch, followed by a recall check
+const STAGES = ["Watch","Trace","Copy"];
 const charData = {};         // cache of hanzi-writer char data
 
 /* ---------------- Shared (built-in) lists: files in /lists ---------------- */
@@ -217,9 +220,16 @@ function selectedItems(){
   }
   return out;
 }
+const isNew = it => { const s = stat(it.word); return !s || s.seen===0; };
 function updateDeckInfo(){
-  const n = selectedItems().length;
-  $("deckInfo").textContent = curList ? `${n} word${n===1?"":"s"} in this drill` : "Upload a vocab file to begin.";
+  const items = selectedItems(), mode = $("optMode").value, nNew = items.filter(isNew).length;
+  const n = mode==="learn" ? nNew : items.length;
+  let msg = "No vocab list found.";
+  if(curList){
+    msg = mode==="learn" ? `${nNew} new word${nNew===1?"":"s"} to learn, in batches of ${BATCH}`
+        : `${n} word${n===1?"":"s"} in this drill` + (nNew ? ` · ${nNew} new (taught first, step by step)` : "");
+  }
+  $("deckInfo").textContent = msg;
   $("start").disabled = n===0;
 }
 function renderProgress(){
@@ -247,10 +257,23 @@ function renderProgress(){
 /* ---------------- Drill ---------------- */
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
-function startDrill(items){
+function startSession(){
+  const items = selectedItems(), mode = $("optMode").value;
+  const fresh = items.filter(isNew);
+  let known = items.filter(it => !isNew(it));
+  const entries = [];
+  for(let i=0;i<fresh.length;i+=BATCH){                         // learn 5, then recall those 5 from a blank grid
+    const b = fresh.slice(i, i+BATCH);
+    b.forEach(it => entries.push({...it, phase:"learn"}));
+    shuffle(b.slice()).forEach(it => entries.push({...it, phase:"recall"}));
+  }
+  if(mode!=="learn"){ if($("optShuffle").checked) known = shuffle(known.slice()); known.forEach(it => entries.push({...it})); }
+  if(entries.length) startDrill(entries, true);
+}
+function startDrill(items, keepOrder){
   audio();   // unlock audio on user gesture
   profile.settings.shuffle = $("optShuffle").checked; profile.settings.pinyin = $("optPinyin").checked; saveDB();
-  deck = items.slice(); if(profile.settings.shuffle) shuffle(deck);
+  deck = items.slice(); if(!keepOrder && profile.settings.shuffle) shuffle(deck);
   idx = 0; sess = { list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
   show("stage"); showItem();
 }
@@ -264,12 +287,14 @@ function showItem(){
   const it = deck[idx]; finished = false;
   $("pCount").textContent = `Word ${idx+1} of ${deck.length}`; updateScore();
   $("pBar").style.width = (idx/deck.length*100)+"%";
-  $("secTag").textContent = it.section;
+  $("secTag").textContent = it.phase==="recall" ? "Recall check · " + it.section : it.section;
   $("prompt").textContent = it.english || ("Pinyin: " + it.pinyin);
   $("hint").textContent = (profile.settings.pinyin && it.english) ? it.pinyin : "";
   $("verdict").className = "verdict"; $("verdict").innerHTML = "";
   $("bNext").classList.add("hidden");
   ["bHint","bReveal","bRetry","bSkip"].forEach(id=>$(id).disabled=false);
+  if(it.phase==="learn"){ learnStage = 0; enterLearnStage(); return; }
+  learnStage = null; setLearnUI(false);
   buildBoxes(true);
 }
 function hintsLeft(){ return HINTS_PER_WORD - itemState.hintsUsed; }
@@ -290,14 +315,14 @@ function buildBoxes(fresh){
     host.appendChild(d); boxEls.push(d);
     writers.push(HanziWriter.create(d, ch, {
       width: sz-4, height: sz-4, padding: Math.round(sz*0.07),
-      showCharacter:false, showOutline:false, strokeColor:ink, outlineColor:"#bbb",
+      showCharacter:false, showOutline:(learnStage===1||learnStage===2), strokeColor:ink, outlineColor:"rgba(140,130,115,0.5)",
       highlightColor:"#b3362b", drawingColor:"#b3362b", drawingWidth:Math.max(8,Math.round(sz/22)),
       strokeAnimationSpeed:1.2, delayBetweenStrokes:150,
       showHintAfterMisses:false,            // no automatic hints — hints are only on request
       highlightOnComplete:true
     }));
   });
-  updateHintBtn(); startChar(0);
+  updateHintBtn(); if(learnStage===0) return; startChar(0);
 }
 function setLive(m){ $("live").textContent = m; }
 
@@ -312,11 +337,13 @@ function startChar(i){
   HanziWriter.loadCharacterData(ch).then(data => {
     if(my!==idx || finished || writers[i]!==w) return;
     charData[ch] = data;
+    if(learnStage===1) drawStrokeOverlay(i, 0, true);
     w.quiz({
       leniency: 1.0,
       onCorrectStroke: s => { itemState.strokesDone = s.strokeNum+1; clearOverlay(i);
+        if(learnStage===1 && s.strokesRemaining) drawStrokeOverlay(i, s.strokeNum+1, true);
         setLive(`✓ Stroke ${s.strokeNum+1} correct` + (s.strokesRemaining ? ` — ${s.strokesRemaining} to go` : "")); },
-      onMistake: s => { itemState.mistakes++; setLive(`✗ That stroke doesn't match (stroke ${s.strokeNum+1}). Try again.`); },
+      onMistake: s => { itemState.mistakes++; if(learnStage!==null){ setLive("Not quite — try that stroke again."); return; } setLive(`✗ That stroke doesn't match (stroke ${s.strokeNum+1}). Try again.`); },
       onComplete: () => { clearOverlay(i); boxEls[i].classList.remove("active"); boxEls[i].classList.add("done"); startChar(i+1); }
     });
   }).catch(() => charMissing(i, ch));
@@ -330,13 +357,11 @@ function charMissing(i, ch){
 /* Hint: overlay ONLY the next stroke (plus a dot where it starts) */
 function clearOverlay(i){ const o = boxEls[i] && boxEls[i].querySelector(".ov"); if(o) o.remove(); }
 let hintTimer = null;
-function useHint(){
-  if(finished || charIdx>=writers.length || hintsLeft()<=0) return;
-  const ch = [...deck[idx].word][charIdx], data = charData[ch], n = itemState.strokesDone;
-  if(!data || n>=data.strokes.length) return;
-  itemState.hintsUsed++; updateHintBtn();
-  const box = boxEls[charIdx], sz = parseFloat(getComputedStyle(box).width) - 4;
-  clearOverlay(charIdx);
+function drawStrokeOverlay(i, n, persist){
+  const ch = [...deck[idx].word][i], data = charData[ch];
+  if(!data || n>=data.strokes.length) return false;
+  const box = boxEls[i], sz = parseFloat(getComputedStyle(box).width) - 4;
+  clearOverlay(i);
   const T = HanziWriter.getScalingTransform(sz, sz, Math.round((sz+4)*0.07));
   const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
   svg.setAttribute("class","ov"); svg.setAttribute("width",sz); svg.setAttribute("height",sz);
@@ -345,9 +370,67 @@ function useHint(){
   const m = data.medians && data.medians[n] && data.medians[n][0];
   if(m){ const c = document.createElementNS(ns,"circle"); c.setAttribute("cx",m[0]); c.setAttribute("cy",m[1]); c.setAttribute("r",36); g.appendChild(c); }
   svg.appendChild(g); box.appendChild(svg);
-  const mine = svg; clearTimeout(hintTimer);
-  hintTimer = setTimeout(() => { if(mine.isConnected) mine.remove(); }, 2000);
+  if(!persist){ clearTimeout(hintTimer); hintTimer = setTimeout(() => { if(svg.isConnected) svg.remove(); }, 2000); }
+  return true;
+}
+function useHint(){
+  if(finished || charIdx>=writers.length || hintsLeft()<=0) return;
+  const n = itemState.strokesDone;
+  if(!drawStrokeOverlay(charIdx, n, false)) return;
+  itemState.hintsUsed++; updateHintBtn();
   setLive(`Hint: stroke ${n+1} shown. ${hintsLeft()} hint${hintsLeft()===1?"":"s"} left for this word.`);
+}
+
+/* ---------------- Learn mode (guided, unscored): watch -> trace -> copy ---------------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function setLearnUI(on){
+  ["bHint","bReveal"].forEach(id => $(id).classList.toggle("hidden", on));
+  if(!on){ $("bReplay").classList.add("hidden"); $("bRetry").classList.remove("hidden"); }
+  $("stageNote").textContent = on ? `Guided practice, nothing here is scored. After every ${BATCH} new words you'll recall them from a blank grid.`
+                                  : "Draw each stroke in order. You get 3 hints per word; each shows only the next stroke.";
+}
+function enterLearnStage(){
+  const it = deck[idx]; finished = false; watchToken++;
+  setLearnUI(true);
+  $("secTag").textContent = `📖 Learn · step ${learnStage+1} of 3: ${STAGES[learnStage]}`;
+  $("hint").textContent = it.pinyin;
+  const instr = ["Watch the stroke order. Replay as often as you like.", "Trace each stroke. The highlighted stroke is next.", "Now draw it from just the faint outline."][learnStage];
+  const v = $("verdict"); v.className = "verdict show info";
+  v.innerHTML = `<b style="font-family:'Songti SC','Noto Serif CJK SC',serif;font-size:22px">${esc(it.word)}</b> &nbsp;${esc(it.pinyin||"")}${it.english?" — "+esc(it.english):""}
+    <div class="more">${instr}</div>${it.examples && learnStage===0 ? `<div class="more" style="color:var(--muted)">${esc(it.examples)}${it.examplesEn?" · "+esc(it.examplesEn):""}</div>`:""}`;
+  $("bNext").classList.toggle("hidden", learnStage!==0); $("bNext").textContent = "Next: Trace →";
+  $("bReplay").classList.toggle("hidden", learnStage!==0);
+  $("bRetry").classList.toggle("hidden", learnStage===0);
+  $("bRetry").disabled = false; $("bSkip").disabled = false;
+  buildBoxes(learnStage===0);
+  if(learnStage===0){
+    setLive("Loading…");
+    Promise.all([...it.word].map(ch => HanziWriter.loadCharacterData(ch).then(d => { charData[ch] = d; })))
+      .then(() => playWatch()).catch(() => setLive("Couldn't load stroke data. Are you offline?"));
+  }
+}
+async function playWatch(){
+  const tok = ++watchToken, my = idx;
+  for(let i=0;i<writers.length;i++){
+    if(tok!==watchToken || my!==idx) return;
+    boxEls.forEach((b,k) => b.classList.toggle("active", k===i));
+    setLive(writers.length>1 ? `Watching character ${i+1} of ${writers.length}` : "Watch the strokes");
+    await new Promise(res => writers[i].animateCharacter({ onComplete: res }));
+    await sleep(350);
+  }
+  if(tok!==watchToken || my!==idx) return;
+  boxEls.forEach(b => b.classList.remove("active")); setLive("Press Replay to watch again, or go on to tracing.");
+}
+function learnStageDone(){
+  finished = true; boxEls.forEach(b => b.classList.remove("active")); setLive("");
+  playSound("hinted");
+  const v = $("verdict"); v.className = "verdict show ok";
+  v.innerHTML = learnStage===1
+    ? `<b>✓ Traced it!</b><div class="more">Next, copy it from just the faint outline.</div>`
+    : `<b>✓ Nicely done</b><div class="more">You'll recall this word from a blank grid in this batch's check.</div>`;
+  $("bNext").classList.remove("hidden"); $("bRetry").disabled = true;
+  $("bNext").textContent = learnStage===1 ? "Next: Copy →" : (idx+1>=deck.length ? "Finish" : "Next →");
+  $("bNext").focus({preventScroll:true});
 }
 
 function record(word, result){      // result: clean | hinted | failed
@@ -358,6 +441,7 @@ function record(word, result){      // result: clean | hinted | failed
 
 function finishItem(){
   if(finished) return; finished = true;
+  if(deck[idx].phase==="learn") return learnStageDone();
   const it = deck[idx], st = itemState, n = [...it.word].length;
   boxEls.forEach(b=>b.classList.remove("active"));
   let cls, head, detail = "", result = null;
@@ -392,8 +476,11 @@ function reveal(){
   finishItem();
 }
 function redraw(){ if(!finished) buildBoxes(false); }
-function next(){ idx++; if(idx>=deck.length) return endSession(false); showItem(); }
+function next(){
+  if(deck[idx].phase==="learn" && learnStage<2){ learnStage++; enterLearnStage(); return; }
+  idx++; if(idx>=deck.length) return endSession(false); showItem(); }
 function skip(){
+  if(deck[idx].phase==="learn"){ watchToken++; writers.forEach(w=>{ try{w.cancelQuiz();}catch(e){} }); learnStage = 2; finished = true; return next(); }   // skipping a lesson doesn't score anything
   if(finished) return next();
   writers.forEach(w=>{ try{w.cancelQuiz();}catch(e){} });
   record(deck[idx].word, "failed"); sess.failed++; sess.review.push({it:deck[idx], result:"failed"}); saveDB();
@@ -426,9 +513,9 @@ $("optMode").onchange = updateDeckInfo;
 $("optShuffle").onchange = () => { profile.settings.shuffle = $("optShuffle").checked; saveDB(); };
 $("optPinyin").onchange = () => { profile.settings.pinyin = $("optPinyin").checked; saveDB();
   if(sess && !$("stage").classList.contains("hidden") && deck[idx]) $("hint").textContent = profile.settings.pinyin ? deck[idx].pinyin : ""; };
-$("start").onclick = () => startDrill(selectedItems());
+$("start").onclick = startSession;
 $("bHint").onclick = useHint; $("bReveal").onclick = reveal; $("bRetry").onclick = redraw;
-$("bSkip").onclick = skip; $("bNext").onclick = next; $("bQuit").onclick = () => endSession(false);
+$("bReplay").onclick = () => { if(learnStage===0) playWatch(); }; $("bSkip").onclick = skip; $("bNext").onclick = next; $("bQuit").onclick = () => endSession(false);
 document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("bNext").classList.contains("hidden") && document.activeElement.tagName!=="BUTTON" && document.activeElement.tagName!=="INPUT") next(); });
 
 $("resetBtn").onclick = resetProgress;
