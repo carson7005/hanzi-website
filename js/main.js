@@ -33,6 +33,18 @@ document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("stage").cl
 
 $("resetBtn").onclick = resetProgress;
 $("dClose").onclick = () => $("syncDlg").close();
+
+/* Welcome popup: shown once to people who aren't signed in, after sign-in state is known (so it never flashes for signed-in users). */
+function onCloudAuth(u){
+  const d = $("welcomeDlg");
+  if(u){ if(d.open) d.close(); if($("gSignIn")) $("gSignIn").closest(".guest-note").remove(); return; }
+  if(profile.settings.welcomed || d.open || $("screenHome").classList.contains("hidden")) return;
+  d.showModal();
+}
+function welcomeDone(){ profile.settings.welcomed = true; saveDB(); if($("welcomeDlg").open) $("welcomeDlg").close(); }
+$("wSignIn").onclick = () => { profile.settings.welcomed = true; saveDB(); Cloud.signIn(); };
+$("wGuest").onclick = welcomeDone;
+$("welcomeDlg").addEventListener("cancel", welcomeDone);     // Esc counts as "continue as guest"
 try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // ask the browser not to clear our data
 $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
 renderHome();                                   // shows the page immediately; lists fill in once loaded

@@ -154,3 +154,14 @@ button.play:hover{background:rgba(139,92,246,.26)}
 .qword button.play{font-family:var(--sans)}
 button.linkbtn{background:none;border:0;padding:0 4px;color:var(--accent2);text-decoration:underline;font-size:inherit}
 button.linkbtn:hover{background:none;color:#c4b5fd}
+
+/* ---- v12: welcome popup, guest reminder ---- */
+dialog.welcome{width:min(420px,calc(100vw - 32px));text-align:center;padding:26px 24px 20px}
+.welcome .wicon{width:64px;height:64px;margin:0 auto 12px;border-radius:18px;display:grid;place-items:center;font:600 22px var(--han);color:#fff;background:linear-gradient(160deg,#a78bfa,#6d3fe0);box-shadow:0 8px 24px var(--glow)}
+.welcome h2{font:700 21px var(--sans);margin:0 0 8px}
+.welcome p{margin:0 0 16px;color:var(--ink)}
+.welcome p.sub{margin:12px 0 0;color:var(--muted)}
+button.wide{display:block;width:100%;padding:12px;font-size:16px;margin-bottom:10px}
+.welcome .linkbtn{font-size:15px}
+.guest-note{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;padding:10px 14px;border-radius:12px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.3);font-size:14px}
+.guest-note button{font-size:14px;padding:6px 12px}

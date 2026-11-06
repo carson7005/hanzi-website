@@ -20,7 +20,7 @@ const Cloud = (() => {
       auth.onAuthStateChanged(u => {
         user = u; setStatus(u ? "syncing" : "signedout");
         if(u) syncNow();
-        if(typeof renderBackupNote==="function") renderBackupNote();
+        if(typeof onCloudAuth==="function") onCloudAuth(u);       // lets the app show the welcome popup once sign-in state is known
       });
       document.addEventListener("visibilitychange", () => {
         if(!user) return;

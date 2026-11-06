@@ -38,11 +38,20 @@ function endSession(silent){
     <div class="row" style="margin-top:16px">
       ${sess.review.length ? `<button class="primary" id="sRetry">Drill these words</button>` : ""}
       <button id="sHome">Back to progress</button>
-    </div>`;
+    </div>${guestReminder(total)}`;
   show("summary");
+  if($("gSignIn")) $("gSignIn").onclick = () => Cloud.signIn();
   if(sess.review.length){
     const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false, learned:false}])).values()];
     $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : sess.type==="translate" ? startTranslate(r) : startDrill(r);
   }
   $("sHome").onclick = () => renderHome();
+}
+
+/* One-time nudge for guests on the end-of-round screen. */
+function guestReminder(total){
+  if(!total || profile.settings.reminded || typeof Cloud==="undefined" || !Cloud.enabled() || Cloud.user()) return "";
+  profile.settings.reminded = true; saveDB();
+  return `<div class="guest-note"><span>Sign in to keep this progress on all your devices.</span>
+    <button class="primary" id="gSignIn">Sign in with Google</button></div>`;
 }
