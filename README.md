@@ -1,4 +1,4 @@
-# Hanzi Drill
+# Chinese Practice
 
 Draw the hanzi for an English prompt; each stroke is checked as you draw.
 
