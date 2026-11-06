@@ -70,7 +70,14 @@ const Cloud = (() => {
     busy = false;
     if(again){ again = false; schedule(); }
   }
+  /* Replace the cloud copy with this browser's progress (used by Reset). */
+  async function overwrite(){
+    if(!user || !db) return;
+    clearTimeout(timer); timer = null;
+    try{ await db.collection("users").doc(user.uid).set({ code: await encodeProgress(), updated: firebase.firestore.FieldValue.serverTimestamp(), v: 2 }); setStatus("synced"); }
+    catch(e){ console.warn("Reset sync failed", e); setStatus("error"); }
+  }
   function saveLocalOnly(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(profile)); }catch(e){} }
 
-  return { init, signIn, signOut, schedule, syncNow, enabled, user: () => user, status: () => status };
+  return { init, signIn, signOut, schedule, syncNow, overwrite, enabled, user: () => user, status: () => status };
 })();

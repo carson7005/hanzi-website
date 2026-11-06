@@ -91,10 +91,6 @@ h2.sec{font:600 16px var(--sans);margin:0 0 8px}
 :root{--t1:#ff7a85; --t2:#ffb454; --t3:#6fdc9a; --t4:#6fb4ff; --t5:#9d97ae}
 .t1{color:var(--t1)} .t2{color:var(--t2)} .t3{color:var(--t3)} .t4{color:var(--t4)} .t5{color:var(--t5)}
 
-.flash{background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px;cursor:pointer}
-.flash.bad{background:var(--bad-bg);color:var(--bad)}
-.backup-note{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
-.backup-note button{font-size:14px;padding:6px 12px}
 
 dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:18px 20px;width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
 dialog::backdrop{background:rgba(5,3,10,.7);backdrop-filter:blur(3px)}

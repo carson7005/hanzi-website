@@ -14,10 +14,10 @@ underscores become spaces). `lists/manifest.json` is an optional fallback/rename
 The page itself has no upload button; the repo's `lists/` folder is the only source of vocab.
 
 ## Where progress lives
-There are no accounts. Progress and settings are saved in this browser (localStorage) on this device.
-**💾 Save / load** gives you a *progress link*: copy it (or share it) and keep it in your notes or email. Opening the link
-on any device loads your progress. You can also paste the link/code, or use a downloaded backup file. Loading always
-combines with what's there (newest result per word wins). The home screen reminds you when there's unsaved progress.
+Progress is saved in the browser as you go. Press **☁️ Sign in to sync** and sign in with Google to keep it in the cloud
+(Firebase, free Spark plan): it syncs automatically a few seconds after each answer and when you come back to the page,
+so any signed-in device picks up where you left off. Syncing merges, keeping the newest result per word.
+**Reset progress** while signed in clears it everywhere. Firebase settings live in `firebase-config.js`.
 
 ## Practice types (tabs on the home screen)
 - **✍️ Writing**: draw each hanzi stroke by stroke from its English meaning. Press **📖 Learn** on a word you don't know yet
@@ -35,6 +35,7 @@ Each practice type has its own progress.
 ## Files
 - `index.html`, `style.css`, `app.js` – the app
 - `sentences.js` – translation sentences per lesson
+- `cloud.js`, `firebase-config.js` – optional cloud sync
 - `pinyin.js` – splits pinyin into syllables and checks answers
 - `data.js` – built-in L3 list (added to every new profile)
 - `vendor/` – Hanzi Writer + JSZip (MIT). Stroke data is fetched per character from the jsDelivr CDN.

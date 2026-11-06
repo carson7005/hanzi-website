@@ -11,13 +11,13 @@ const MASTER_STREAK = 2;           // clean results in a row to count a word as 
 
 /* ---------------- Storage (this browser only) ---------------- */
 const OLD_KEY = "hanziDrill.v1";          // earlier multi-profile version
-function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null, practice:"write" }, progress:{}, pinyin:{}, translate:{}, sessions:[], backup:{ ts:0, changes:0 } }; }
+function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null, practice:"write" }, progress:{}, pinyin:{}, translate:{}, sessions:[], backup:{ ts:0, changes:0 }, resetAt:0 }; }
 function mergeState(src){
   const st = freshState();
   if(src && typeof src==="object"){
     Object.assign(st.settings, src.settings||{});
     st.progress = src.progress || {}; st.pinyin = src.pinyin || {}; st.translate = src.translate || {}; st.sessions = src.sessions || [];
-    Object.assign(st.backup, src.backup||{});
+    Object.assign(st.backup, src.backup||{}); st.resetAt = src.resetAt || 0;
   }
   return st;
 }
@@ -166,31 +166,27 @@ function allLists(){ return sharedLists; }
 /* ---------------- Screens ---------------- */
 function show(which){
   ["screenHome","stage","pstage","tstage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
-  if(which!=="screenHome") $("flash").hidden = true;
   renderUserBar();
 }
 function renderUserBar(){
   $("userBar").innerHTML = `<button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"🔔 Sound on":"🔕 Sound off"}</button>
-    ${typeof Cloud!=="undefined" && Cloud.enabled() ? `<button id="ubCloud" class="cloud ${Cloud.status()}" title="Sync progress across devices">${CLOUD_LABEL[Cloud.status()]||"☁️ Sync"}</button>` : ""}
-    <button id="ubSync" title="Save your progress as a link, or load it on another device">💾 Save / load</button>`;
+    ${typeof Cloud!=="undefined" && Cloud.enabled() ? `<button id="ubCloud" class="cloud ${Cloud.status()}" title="Sync progress across devices">${CLOUD_LABEL[Cloud.status()]||"☁️ Sync"}</button>` : ""}`;
   if($("ubCloud")) $("ubCloud").onclick = openSync;
   $("ubSound").onclick = () => { profile.settings.sound = !profile.settings.sound; saveDB(); renderUserBar(); if(profile.settings.sound) playSound("clean"); };
-  $("ubSync").onclick = openSync;
 }
 
-/* ---------------- Save / load: progress link, code, or file ----------------
-   Progress is packed into a short code (compressed JSON) that fits in a link: <site>#p=<code>.
-   Loading always merges: for each word, the most recent result wins, so nothing newer is lost. */
+/* ---------------- Progress packing (used by cloud sync) ----------------
+   Progress is packed into a short compressed code. Merging keeps the newest result per word. */
 const LASTS = [null, "clean", "hinted", "failed"];
-const packStats = m => Object.fromEntries(Object.entries(m||{}).map(([w,s]) =>
-  [w, [s.seen, s.clean, s.failed, s.streak, Math.max(0, LASTS.indexOf(s.last)), Math.round((s.ts||0)/6e4)]]));
-const unpackStats = m => Object.fromEntries(Object.entries(m||{}).map(([w,a]) =>
-  [w, { seen:a[0], clean:a[1], hinted:Math.max(0, a[0]-a[1]-a[2]), failed:a[2], streak:a[3], last:LASTS[a[4]]||null, ts:a[5]*6e4 }]));
+const packStats = m => Object.fromEntries(Object.entries(m||{}).map(([w,s]) =>         // times stored in whole seconds, rounded down
+  [w, [s.seen, s.clean, s.failed, s.streak, Math.max(0, LASTS.indexOf(s.last)), Math.floor((s.ts||0)/1000)]]));
+const unpackStats = (m, unit = 1000) => Object.fromEntries(Object.entries(m||{}).map(([w,a]) =>
+  [w, { seen:a[0], clean:a[1], hinted:Math.max(0, a[0]-a[1]-a[2]), failed:a[2], streak:a[3], last:LASTS[a[4]]||null, ts:a[5]*unit }]));
 function b64url(bytes){ let s = ""; for(let i=0;i<bytes.length;i+=8192) s += String.fromCharCode(...bytes.subarray(i, i+8192)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function unb64url(str){ const bin = atob(str.replace(/-/g,"+").replace(/_/g,"/")); const a = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i] = bin.charCodeAt(i); return a; }
 async function pipeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function encodeProgress(){
-  const json = JSON.stringify({ v:2, s:profile.settings, w:packStats(profile.progress), y:packStats(profile.pinyin), z:packStats(profile.translate),
+  const json = JSON.stringify({ v:3, r:profile.resetAt||0, s:profile.settings, w:packStats(profile.progress), y:packStats(profile.pinyin), z:packStats(profile.translate),
     h:(profile.sessions||[]).slice(-20).map(x => [Math.round(x.ts/6e4), x.list, x.clean, x.hinted, x.failed, x.type==="pinyin"?1:x.type==="translate"?2:0]) });
   const bytes = new TextEncoder().encode(json);
   if(window.CompressionStream){ try{ return "1" + b64url(await pipeBytes(bytes, new CompressionStream("deflate-raw"))); }catch(e){} }
@@ -203,23 +199,28 @@ async function decodeProgress(code){
     bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
   } else if(code[0]!=="0") throw new Error("that isn't a progress code.");
   const d = JSON.parse(new TextDecoder().decode(bytes));
-  return { settings:d.s||{}, progress:unpackStats(d.w), pinyin:unpackStats(d.y), translate:unpackStats(d.z),
+  const u = (d.v||2) >= 3 ? 1000 : 6e4;                       // older codes stored minutes
+  return { resetAt:d.r||0, settings:d.s||{}, progress:unpackStats(d.w, u), pinyin:unpackStats(d.y, u), translate:unpackStats(d.z, u),
     sessions:(d.h||[]).map(a => ({ ts:a[0]*6e4, list:a[1], clean:a[2], hinted:a[3], failed:a[4], type:["write","pinyin","translate"][a[5]]||"write" })) };
 }
-const progressLink = code => location.origin + location.pathname + "#p=" + code;
-
 /* Combine incoming progress with this browser's. Returns how many words changed. */
 function mergeProgress(inc){
   const wasEmpty = ["progress","pinyin","translate"].every(k => !Object.keys(profile[k]).length);
   let changed = 0;
+  const R = Math.max(profile.resetAt||0, inc.resetAt||0);      // progress from before the latest reset is dropped everywhere
+  if(R > (profile.resetAt||0)){
+    for(const key of ["progress","pinyin","translate"]) for(const [w, s] of Object.entries(profile[key])) if((s.ts||0) <= R){ delete profile[key][w]; changed++; }
+    profile.sessions = profile.sessions.filter(x => x.ts > R); profile.resetAt = R;
+  }
   for(const key of ["progress","pinyin","translate"]){
     for(const [w, s] of Object.entries(inc[key]||{})){
+      if((s.ts||0) <= R) continue;
       const cur = profile[key][w];
       if(!cur || (s.ts||0) > (cur.ts||0)){ profile[key][w] = s; changed++; }
     }
   }
   const seen = new Set(profile.sessions.map(s => Math.round(s.ts/6e4)+"|"+s.list));
-  for(const s of inc.sessions||[]) if(!seen.has(Math.round(s.ts/6e4)+"|"+s.list)) profile.sessions.push(s);
+  for(const s of inc.sessions||[]) if(s.ts > R && !seen.has(Math.round(s.ts/6e4)+"|"+s.list)) profile.sessions.push(s);
   profile.sessions.sort((a,b) => a.ts-b.ts); profile.sessions = profile.sessions.slice(-50);
   if(wasEmpty && inc.settings) Object.assign(profile.settings, inc.settings);
   profile.backup = { ts:Date.now(), changes:0 };
@@ -228,45 +229,8 @@ function mergeProgress(inc){
   return changed;
 }
 
-/* Accepts a progress link, a bare code, or the contents of a downloaded backup file. */
-async function loadFromText(text){
-  text = String(text||"").trim();
-  if(!text) throw new Error("paste a progress link or code first.");
-  if(text[0]==="{"){
-    const d = JSON.parse(text);
-    if(d.format!=="hanzi-drill-progress" || !d.data) throw new Error("that isn't a Hanzi Drill backup file.");
-    return mergeProgress(mergeState(d.data));
-  }
-  const m = text.match(/[#&?]p=([A-Za-z0-9_-]+)/) || text.match(/^([01][A-Za-z0-9_-]+)$/);
-  if(!m) throw new Error("that doesn't look like a progress link or code.");
-  return mergeProgress(await decodeProgress(m[1]));
-}
-const loadedMsg = n => n ? `✓ Progress loaded: ${n} word${n===1?"":"s"} updated.` : "✓ Loaded. This browser already had everything in it.";
-
-function downloadBackup(){
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({ format:"hanzi-drill-progress", version:2, exported:new Date().toISOString(), data:profile }, null, 1)], {type:"application/json"}));
-  a.download = `hanzi-drill-progress-${new Date().toISOString().slice(0,10)}.json`;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
-  markBackedUp();
-}
-function markBackedUp(){ profile.backup = { ts:Date.now(), changes:0 }; saveDB(); renderBackupNote(); }
-
-/* Copy the progress link. Falls back to showing it selected if the clipboard is blocked. */
-async function copyProgressLink(msgEl){
-  const link = progressLink(await encodeProgress());
-  try{ await navigator.clipboard.writeText(link); markBackedUp();
-    if(msgEl){ msgEl.className = "dmsg ok"; msgEl.textContent = "✓ Link copied. Paste it somewhere safe: your notes, or an email to yourself."; }
-    return true;
-  }catch(e){
-    openSync(); const box = $("dLink"); box.value = link; box.hidden = false; box.select();
-    $("dMsg").className = "dmsg"; $("dMsg").textContent = "Copy the selected link above (Ctrl/Cmd + C).";
-    markBackedUp(); return false;
-  }
-}
-
 const CLOUD_LABEL = { off:"☁️ Sync", signedout:"☁️ Sign in to sync", syncing:"☁️ Syncing…", synced:"☁️ Synced", offline:"☁️ Offline", error:"☁️ Sync problem" };
-/* Cloud section at the top of the Save / load panel. */
+/* Cloud sync panel (opened from the ☁️ button). */
 function renderCloudBox(){
   const box = $("cloudBox"); if(!box) return;
   if(typeof Cloud==="undefined" || !Cloud.enabled()){ box.hidden = true; return; }
@@ -274,7 +238,7 @@ function renderCloudBox(){
   const u = Cloud.user(), st = Cloud.status();
   if(!u){
     box.innerHTML = `<h3>Sync across devices</h3>
-      <p class="sub" style="margin-top:0">Sign in with Google and your progress saves to the cloud automatically. Sign in on any device to pick up where you left off. No links needed.</p>
+      <p class="sub" style="margin-top:0">Sign in with Google and your progress saves to the cloud automatically. Sign in on any device to pick up where you left off.</p>
       <button class="primary" id="cSignIn" ${st==="off"||st==="error"?"disabled":""}>Sign in with Google</button>
       ${st==="error" ? `<p class="sub" style="color:var(--bad)">Cloud sync couldn't start. Check your connection and reload.</p>` : ""}`;
     $("cSignIn").onclick = () => Cloud.signIn();
@@ -289,51 +253,18 @@ function renderCloudBox(){
   }
 }
 function openSync(){
-  renderCloudBox();
-  const d = $("syncDlg"); $("dMsg").textContent = ""; $("dLink").hidden = true; $("dPaste").value = "";
-  $("dShare").hidden = !navigator.share;
-  if(!d.open) d.showModal();
-}
-async function syncLoad(text){
-  try{ const n = await loadFromText(text); $("dMsg").className = "dmsg ok"; $("dMsg").textContent = loadedMsg(n); $("dPaste").value = ""; renderHome(); }
-  catch(e){ $("dMsg").className = "dmsg bad"; $("dMsg").textContent = "Couldn't load: " + e.message; }
-}
-function wireSync(){
-  $("dCopy").onclick = () => copyProgressLink($("dMsg"));
-  $("dShare").onclick = async () => { try{ await navigator.share({ title:"My Hanzi Drill progress", url:progressLink(await encodeProgress()) }); markBackedUp(); }catch(e){} };
-  $("dFile").onclick = downloadBackup;
-  $("dLoad").onclick = () => syncLoad($("dPaste").value);
-  $("dFileIn").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if(f) syncLoad(await f.text()); };
-  $("dClose").onclick = () => $("syncDlg").close();
-  // Drop a backup file anywhere on the page to load it
-  document.addEventListener("dragover", e => { if([...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
-  document.addEventListener("drop", async e => { const f = e.dataTransfer.files[0]; if(!f) return; e.preventDefault(); openSync(); syncLoad(await f.text()); });
+  renderCloudBox(); $("dMsg").textContent = "";
+  if(!$("syncDlg").open) $("syncDlg").showModal();
 }
 
-/* Opening a progress link loads it, then tidies the address bar. */
-async function loadFromHash(){
-  const m = location.hash.match(/^#p=([A-Za-z0-9_-]+)/);
-  if(!m) return;
-  history.replaceState(null, "", location.pathname + location.search);
-  try{ flash(loadedMsg(mergeProgress(await decodeProgress(m[1]))), "ok"); }
-  catch(e){ flash("Couldn't load progress from that link: " + e.message, "bad"); }
-  renderHome();
-}
-function flash(msg, kind){ const f = $("flash"); f.className = "flash " + (kind||""); f.textContent = msg; f.hidden = false; }
-
-/* Home reminder: how much progress hasn't been saved to a link yet. */
-function renderBackupNote(){
-  const el = $("backupNote"); if(!el) return;
-  const b = profile.backup || {}, any = ["progress","pinyin","translate"].some(k => Object.keys(profile[k]).length);
-  if(!any || (b.ts && !b.changes) || (typeof Cloud!=="undefined" && Cloud.user())){ el.hidden = true; return; }
-  el.hidden = false;
-  el.querySelector("span").textContent = b.ts
-    ? `${b.changes} answer${b.changes===1?"":"s"} since you last saved a progress link.`
-    : "Your progress is only saved in this browser. Save a link so you can't lose it.";
-}
 function resetProgress(){
-  if(!confirm("Erase all saved progress in this browser? This can't be undone (Export first if you want a backup).")) return;
-  const keep = profile.settings; profile = freshState(); profile.settings = keep; saveDB(); renderHome();
+  const cloudOn = typeof Cloud!=="undefined" && Cloud.user();
+  if(!confirm(cloudOn ? "Erase all your progress, here and in the cloud (every signed-in device)? This can't be undone."
+                      : "Erase all saved progress in this browser? This can't be undone.")) return;
+  const keep = profile.settings; profile = freshState(); profile.settings = keep; profile.resetAt = Date.now();
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(profile)); }catch(e){}
+  if(cloudOn) Cloud.overwrite();                 // replace the cloud copy too, or the next sync would bring it all back
+  renderHome();
 }
 
 /* ---------------- Home: lists, sections, progress ---------------- */
@@ -353,7 +284,7 @@ function renderHome(){
     b.onclick = () => { if(activeSections.has(s)){ activeSections.delete(s); b.setAttribute("aria-pressed","false"); } else { activeSections.add(s); b.setAttribute("aria-pressed","true"); } updateDeckInfo(); };
     box.appendChild(b);
   });
-  updateDeckInfo(); renderProgress(); renderBackupNote(); show("screenHome");
+  updateDeckInfo(); renderProgress(); show("screenHome");
 }
 const isPinyinPractice = () => profile.settings.practice === "pinyin";
 const isTranslatePractice = () => profile.settings.practice === "translate";
@@ -687,11 +618,8 @@ function endSession(silent){
     <div class="row" style="margin-top:16px">
       ${sess.review.length ? `<button class="primary" id="sRetry">Drill these words</button>` : ""}
       <button id="sHome">Back to progress</button>
-      <button id="sSave">💾 Copy progress link</button>
-    </div>
-    <div class="dmsg" id="sMsg"></div>`;
+    </div>`;
   show("summary");
-  $("sSave").onclick = () => copyProgressLink($("sMsg"));
   if(sess.review.length){
     const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false, learned:false}])).values()];
     $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : sess.type==="translate" ? startTranslate(r) : startDrill(r);
@@ -1029,12 +957,9 @@ $("bReplay").onclick = () => { if(learnStage===0) playWatch(); }; $("bSkip").onc
 document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("stage").classList.contains("hidden") && !$("bNext").classList.contains("hidden") && document.activeElement.tagName!=="BUTTON" && document.activeElement.tagName!=="INPUT") next(); });
 
 $("resetBtn").onclick = resetProgress;
-$("bnCopy").onclick = () => copyProgressLink(null).then(ok => { if(ok) flash("✓ Progress link copied. Paste it somewhere safe: your notes, or an email to yourself.", "ok"); });
-$("flash").onclick = () => { $("flash").hidden = true; };
-wireSync();
+$("dClose").onclick = () => $("syncDlg").close();
 try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // ask the browser not to clear our data
 $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
 renderHome();                                   // shows the page immediately; lists fill in once loaded
-loadFromHash();
 if(typeof Cloud!=="undefined") Cloud.init();
 loadSharedLists().then(() => { if(!$("screenHome").classList.contains("hidden")) renderHome(); });
