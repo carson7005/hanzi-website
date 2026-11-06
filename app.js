@@ -11,12 +11,12 @@ const MASTER_STREAK = 2;           // clean results in a row to count a word as 
 
 /* ---------------- Storage (this browser only) ---------------- */
 const OLD_KEY = "hanziDrill.v1";          // earlier multi-profile version
-function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null, practice:"write" }, progress:{}, pinyin:{}, sessions:[], backup:{ ts:0, changes:0 } }; }
+function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null, practice:"write" }, progress:{}, pinyin:{}, translate:{}, sessions:[], backup:{ ts:0, changes:0 } }; }
 function mergeState(src){
   const st = freshState();
   if(src && typeof src==="object"){
     Object.assign(st.settings, src.settings||{});
-    st.progress = src.progress || {}; st.pinyin = src.pinyin || {}; st.sessions = src.sessions || [];
+    st.progress = src.progress || {}; st.pinyin = src.pinyin || {}; st.translate = src.translate || {}; st.sessions = src.sessions || [];
     Object.assign(st.backup, src.backup||{});
   }
   return st;
@@ -79,31 +79,40 @@ function parseVocab(lines){
 function b64ToBuf(b64){ const bin = atob(b64), a = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a.buffer; }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-/* ---------------- Sound ---------------- */
-let actx = null;
+/* ---------------- Sound: soft, rounded tones through a gentle filter and echo ---------------- */
+let actx = null, bus = null;
 function audio(){
-  if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } }
+  if(!actx){
+    try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; }
+    const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;     // takes the edge off
+    const master = actx.createGain(); master.gain.value = 0.55;
+    const echo = actx.createDelay(); echo.delayTime.value = 0.18;
+    const fb = actx.createGain(); fb.gain.value = 0.22;                                         // short, quiet echo
+    lp.connect(master); lp.connect(echo); echo.connect(fb).connect(echo); echo.connect(master);
+    master.connect(actx.destination); bus = lp;
+  }
   if(actx.state==="suspended") actx.resume();
   return actx;
 }
-function tone(freq, t0, dur, gain, type="sine"){
-  const c = actx, o = c.createOscillator(), g = c.createGain();
-  o.type = type; o.frequency.value = freq;
+function note(freq, t0, dur, gain){       // sine with a soft attack and long, smooth fade
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = "sine"; o.frequency.value = freq;
   g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(gain, t0+0.01);
+  g.gain.linearRampToValueAtTime(gain, t0+0.025);
   g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
-  o.connect(g).connect(c.destination); o.start(t0); o.stop(t0+dur+0.05);
-}
-function bell(f, t0, gain){            // little bell: fundamental + inharmonic partials
-  tone(f, t0, 1.3, gain); tone(f*2.76, t0, 0.7, gain*0.35); tone(f*5.4, t0, 0.35, gain*0.15);
+  o.connect(g).connect(bus); o.start(t0); o.stop(t0+dur+0.05);
+  const o2 = actx.createOscillator(), g2 = actx.createGain();                                // faint octave for warmth
+  o2.type = "sine"; o2.frequency.value = freq*2;
+  g2.gain.setValueAtTime(0.0001, t0); g2.gain.linearRampToValueAtTime(gain*0.12, t0+0.02); g2.gain.exponentialRampToValueAtTime(0.0001, t0+dur*0.5);
+  o2.connect(g2).connect(bus); o2.start(t0); o2.stop(t0+dur);
 }
 function playSound(kind){
   if(!profile || !profile.settings.sound) return;
   if(!audio()) return;
   const t = actx.currentTime + 0.02;
-  if(kind==="clean"){ bell(1318.5, t, 0.28); bell(1760, t+0.12, 0.24); }       // bright two-note ring
-  else if(kind==="hinted"){ bell(1046.5, t, 0.24); }                            // single softer ring
-  else { tone(330, t, 0.35, 0.18, "triangle"); tone(247, t+0.16, 0.45, 0.16, "triangle"); }  // gentle low "nope"
+  if(kind==="clean"){ note(523.25, t, 0.9, 0.14); note(659.25, t+0.09, 0.9, 0.12); note(783.99, t+0.18, 1.1, 0.11); }   // soft C-E-G arpeggio
+  else if(kind==="hinted"){ note(587.33, t, 0.8, 0.12); note(698.46, t+0.1, 0.9, 0.1); }                              // two gentle notes
+  else { note(392, t, 0.5, 0.1); note(329.63, t+0.14, 0.7, 0.09); }                                                    // quiet falling pair
 }
 
 /* ---------------- State ---------------- */
@@ -156,7 +165,8 @@ function allLists(){ return sharedLists; }
 
 /* ---------------- Screens ---------------- */
 function show(which){
-  ["screenHome","stage","pstage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
+  ["screenHome","stage","pstage","tstage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
+  if(which!=="screenHome") $("flash").hidden = true;
   renderUserBar();
 }
 function renderUserBar(){
@@ -178,8 +188,8 @@ function b64url(bytes){ let s = ""; for(let i=0;i<bytes.length;i+=8192) s += Str
 function unb64url(str){ const bin = atob(str.replace(/-/g,"+").replace(/_/g,"/")); const a = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i] = bin.charCodeAt(i); return a; }
 async function pipeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function encodeProgress(){
-  const json = JSON.stringify({ v:2, s:profile.settings, w:packStats(profile.progress), y:packStats(profile.pinyin),
-    h:(profile.sessions||[]).slice(-20).map(x => [Math.round(x.ts/6e4), x.list, x.clean, x.hinted, x.failed, x.type==="pinyin"?1:0]) });
+  const json = JSON.stringify({ v:2, s:profile.settings, w:packStats(profile.progress), y:packStats(profile.pinyin), z:packStats(profile.translate),
+    h:(profile.sessions||[]).slice(-20).map(x => [Math.round(x.ts/6e4), x.list, x.clean, x.hinted, x.failed, x.type==="pinyin"?1:x.type==="translate"?2:0]) });
   const bytes = new TextEncoder().encode(json);
   if(window.CompressionStream){ try{ return "1" + b64url(await pipeBytes(bytes, new CompressionStream("deflate-raw"))); }catch(e){} }
   return "0" + b64url(bytes);
@@ -191,16 +201,16 @@ async function decodeProgress(code){
     bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
   } else if(code[0]!=="0") throw new Error("that isn't a progress code.");
   const d = JSON.parse(new TextDecoder().decode(bytes));
-  return { settings:d.s||{}, progress:unpackStats(d.w), pinyin:unpackStats(d.y),
-    sessions:(d.h||[]).map(a => ({ ts:a[0]*6e4, list:a[1], clean:a[2], hinted:a[3], failed:a[4], type:a[5]?"pinyin":"write" })) };
+  return { settings:d.s||{}, progress:unpackStats(d.w), pinyin:unpackStats(d.y), translate:unpackStats(d.z),
+    sessions:(d.h||[]).map(a => ({ ts:a[0]*6e4, list:a[1], clean:a[2], hinted:a[3], failed:a[4], type:["write","pinyin","translate"][a[5]]||"write" })) };
 }
 const progressLink = code => location.origin + location.pathname + "#p=" + code;
 
 /* Combine incoming progress with this browser's. Returns how many words changed. */
 function mergeProgress(inc){
-  const wasEmpty = !Object.keys(profile.progress).length && !Object.keys(profile.pinyin).length;
+  const wasEmpty = ["progress","pinyin","translate"].every(k => !Object.keys(profile[k]).length);
   let changed = 0;
-  for(const key of ["progress","pinyin"]){
+  for(const key of ["progress","pinyin","translate"]){
     for(const [w, s] of Object.entries(inc[key]||{})){
       const cur = profile[key][w];
       if(!cur || (s.ts||0) > (cur.ts||0)){ profile[key][w] = s; changed++; }
@@ -288,7 +298,7 @@ function flash(msg, kind){ const f = $("flash"); f.className = "flash " + (kind|
 /* Home reminder: how much progress hasn't been saved to a link yet. */
 function renderBackupNote(){
   const el = $("backupNote"); if(!el) return;
-  const b = profile.backup || {}, any = Object.keys(profile.progress).length + Object.keys(profile.pinyin).length;
+  const b = profile.backup || {}, any = ["progress","pinyin","translate"].some(k => Object.keys(profile[k]).length);
   if(!any || (b.ts && !b.changes)){ el.hidden = true; return; }
   el.hidden = false;
   el.querySelector("span").textContent = b.ts
@@ -320,7 +330,8 @@ function renderHome(){
   updateDeckInfo(); renderProgress(); renderBackupNote(); show("screenHome");
 }
 const isPinyinPractice = () => profile.settings.practice === "pinyin";
-const progMap = () => isPinyinPractice() ? profile.pinyin : profile.progress;   // writing and pinyin are tracked separately
+const isTranslatePractice = () => profile.settings.practice === "translate";
+const progMap = () => isTranslatePractice() ? profile.translate : isPinyinPractice() ? profile.pinyin : profile.progress;   // each practice type is tracked separately
 const stat = w => (progMap()[w] || null);
 const isMastered = w => { const s = stat(w); return !!s && s.streak >= MASTER_STREAK; };
 function selectedItems(){
@@ -337,6 +348,11 @@ function selectedItems(){
 }
 const isNew = it => { const s = stat(it.word); return !s || s.seen===0; };
 function updateDeckInfo(){
+  if(isTranslatePractice()){
+    const n = translateItems().length, fromBank = curList && typeof SENTENCES!=="undefined" && /\bL(\d+)/i.test(curList.name) && SENTENCES["L"+curList.name.match(/\bL(\d+)/i)[1]];
+    $("deckInfo").textContent = !curList ? "No vocab list found." : !sentencesFor(curList).length ? "No sentences for this list yet." : `${n} sentence${n===1?"":"s"} in this drill` + (fromBank ? "" : " (from the list's example phrases)");
+    $("start").disabled = n===0; return;
+  }
   const items = selectedItems(), mode = $("optMode").value, nNew = items.filter(isNew).length;
   const n = mode==="learn" ? nNew : items.length;
   let msg = "No vocab list found.";
@@ -350,19 +366,21 @@ function updateDeckInfo(){
 function renderProgress(){
   const P = $("progressPanel");
   if(!curList){ P.innerHTML = `<h2 class="sec">Progress</h2><div class="sub">No list yet.</div>`; return; }
-  const uniq = [...new Map(curList.items.map(i=>[i.word,i])).values()];
+  const uniq = isTranslatePractice() ? sentencesFor(curList) : [...new Map(curList.items.map(i=>[i.word,i])).values()];
   let mastered=0, practiced=0, att=0, clean=0;
   uniq.forEach(i => { const s = stat(i.word); if(s){ practiced++; att += s.seen; clean += s.clean; if(s.streak>=MASTER_STREAK) mastered++; } });
   const acc = att ? Math.round(clean/att*100) : 0;
   const chips = uniq.map(i => {
     const s = stat(i.word); let c = "";
     if(s) c = s.streak>=MASTER_STREAK ? "m" : (s.last==="failed" ? "f" : s.last==="hinted" ? "h" : "");
-    const tip = s ? `${i.pinyin} — ${i.english} · ${s.clean}/${s.seen} clean` : `${i.pinyin} — ${i.english} · not practiced`;
-    return `<span class="w ${c}" title="${esc(tip)}">${esc(i.word)}</span>`;
+    const what = i.pinyin!==undefined ? `${i.pinyin} — ${i.english}` : i.english;
+    const tip = s ? `${what} · ${s.clean}/${s.seen} clean` : `${what} · not practiced`;
+    const label = [...i.word].length>9 ? [...i.word].slice(0,8).join("")+"…" : i.word;
+    return `<span class="w ${c}" title="${esc(tip)}">${esc(label)}</span>`;
   }).join("");
   const recent = (profile.sessions||[]).slice(-3).reverse().map(s =>
-    `<div class="note">${new Date(s.ts).toLocaleDateString()} · ${esc(s.list)}${s.type==="pinyin"?" (pinyin)":""}: ${s.clean} clean, ${s.hinted} with hints, ${s.failed} missed</div>`).join("");
-  P.innerHTML = `<h2 class="sec">Progress — ${esc(curList.name)} · ${isPinyinPractice() ? "pinyin &amp; tones" : "writing"}</h2>
+    `<div class="note">${new Date(s.ts).toLocaleDateString()} · ${esc(s.list)}${s.type==="pinyin"?" (pinyin)":s.type==="translate"?" (translate)":""}: ${s.clean} clean, ${s.hinted} with hints, ${s.failed} missed</div>`).join("");
+  P.innerHTML = `<h2 class="sec">Progress — ${esc(curList.name)} · ${isTranslatePractice() ? "translation" : isPinyinPractice() ? "pinyin &amp; tones" : "writing"}</h2>
     <div class="stats"><div><b>${mastered}/${uniq.length}</b>mastered</div><div><b>${practiced}/${uniq.length}</b>practiced</div><div><b>${att?acc+"%":"–"}</b>clean on first go</div></div>
     <div class="words">${chips}</div>
     <div class="legend"><span>■ green: mastered (${MASTER_STREAK} clean in a row)</span><span>■ yellow: last time used hints</span><span>■ red: last time missed</span><span>□ not practiced / in progress</span></div>
@@ -373,6 +391,7 @@ function renderProgress(){
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 function startSession(){
+  if(isTranslatePractice()){ let t = translateItems(); if($("optShuffle").checked) t = shuffle(t.slice()); if(t.length) startTranslate(t); return; }
   const items = selectedItems(), mode = $("optMode").value;
   const fresh = items.filter(isNew);
   let known = items.filter(it => !isNew(it));
@@ -431,8 +450,8 @@ function buildBoxes(fresh){
     host.appendChild(d); boxEls.push(d);
     writers.push(HanziWriter.create(d, ch, {
       width: sz-4, height: sz-4, padding: Math.round(sz*0.07),
-      showCharacter:false, showOutline:(learnStage===1||learnStage===2), strokeColor:ink, outlineColor:"rgba(140,130,115,0.5)",
-      highlightColor:"#b3362b", drawingColor:"#b3362b", drawingWidth:Math.max(8,Math.round(sz/22)),
+      showCharacter:false, showOutline:(learnStage===1||learnStage===2), strokeColor:ink, outlineColor:"rgba(170,160,205,0.28)",
+      highlightColor:"#c4b5fd", drawingColor:"#a78bfa", drawingWidth:Math.max(8,Math.round(sz/22)),
       strokeAnimationSpeed:1.2, delayBetweenStrokes:150,
       showHintAfterMisses:false,            // no automatic hints — hints are only on request
       highlightOnComplete:true
@@ -626,7 +645,7 @@ function endSession(silent){
   $("sSave").onclick = () => copyProgressLink($("sMsg"));
   if(sess.review.length){
     const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false}])).values()];
-    $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : startDrill(r);
+    $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : sess.type==="translate" ? startTranslate(r) : startDrill(r);
   }
   $("sHome").onclick = () => renderHome();
 }
@@ -780,10 +799,175 @@ function wirePinyin(){
   $("qQuit").onclick = () => endSession(false);
 }
 
+/* ---------------- Translate drill ----------------
+   Sentences come from sentences.js (by lesson number in the list name, e.g. "L3 ..."), or else
+   from the list's example phrases where the Chinese and English line up one to one. */
+function sentencesFor(list){
+  if(!list) return [];
+  const m = list.name.match(/\bL(\d+)/i), bank = m && typeof SENTENCES!=="undefined" && SENTENCES["L"+m[1]];
+  if(bank) return bank.map(([section, zh, en, enAlt=[], zhAlt=[]]) => ({ word:zh, english:en, enAlt, zhAlt, section }));
+  const out = [], seen = new Set();
+  for(const it of list.items){
+    if(!it.examples || !it.examplesEn) continue;
+    const zs = it.examples.split(/[，,]/).map(s=>s.trim()).filter(Boolean), es = it.examplesEn.split(/[，,]/).map(s=>s.trim()).filter(Boolean);
+    if(zs.length!==es.length) continue;
+    zs.forEach((z, i) => {
+      const zh = z.replace(/[（(]([^）)]*)[）)]/g, "$1"), alt = z.replace(/[（(][^）)]*[）)]/g, "");   // 我（的）家 → 我的家 or 我家
+      if(CJK.test(zh) && !seen.has(zh)){ seen.add(zh); out.push({ word:zh, english:es[i], enAlt:[], zhAlt: alt!==zh ? [alt] : [], section:it.section }); }
+    });
+  }
+  return out;
+}
+function translateItems(){
+  const mode = $("optMode").value, seen = new Set();
+  return sentencesFor(curList).filter(s => {
+    if(seen.has(s.word) || !activeSections.has(s.section)) return false;
+    seen.add(s.word);
+    return mode==="weak" ? !isMastered(s.word) : mode==="learn" ? isNew(s) : true;
+  });
+}
+
+/* Lenient comparison: ignore punctuation, spacing, case, articles and common contractions. */
+const normZh = s => String(s).normalize("NFKC").replace(/[\s\p{P}\p{S}]/gu, "");
+const NUMS = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve"];
+const SYN = { mum:"mom", mother:"mom", father:"dad", ok:"okay", picture:"photo", photograph:"photo", film:"movie", kids:"children", kid:"child",
+  practise:"practice", glad:"happy", lesson:"class", journalist:"reporter", thirty:"30", "15":"fifteen" };
+function normEn(s){
+  let t = String(s).toLowerCase().replace(/[’‘]/g, "'");
+  [[/\bcan't\b/g,"can not"],[/\bwon't\b/g,"will not"],[/n't\b/g," not"],[/\blet's\b/g,"let us"],[/'re\b/g," are"],[/'m\b/g," am"],
+   [/'ll\b/g," will"],[/'ve\b/g," have"],[/'d\b/g," would"],[/\b(it|that|what|he|she|there|who|where|how)'s\b/g,"$1 is"]].forEach(([a,b]) => { t = t.replace(a, b); });
+  return t.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean)
+    .map(w => /^\d+$/.test(w) && +w<=12 ? NUMS[+w] : w).map(w => SYN[w] || w)
+    .filter(w => !["a","an","the"].includes(w)).join(" ");
+}
+/* Token diff (longest common subsequence): marks what's extra in yours and missing from yours. */
+function diffTokens(a, b){
+  const n = a.length, m = b.length, L = Array.from({length:n+1}, () => new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) L[i][j] = a[i]===b[j] ? L[i+1][j+1]+1 : Math.max(L[i+1][j], L[i][j+1]);
+  const inA = new Array(n).fill(false), inB = new Array(m).fill(false);
+  for(let i=0,j=0; i<n && j<m;){ if(a[i]===b[j]){ inA[i]=inB[j]=true; i++; j++; } else if(L[i+1][j]>=L[i][j+1]) i++; else j++; }
+  return { inA, inB, score: (2*L[0][0]) / ((n+m)||1) };
+}
+function keyWords(zh){                    // vocab words found in the sentence, longest match first
+  const dict = new Map();
+  [curList, ...allLists()].filter(Boolean).forEach(l => l.items.forEach(it => { if(!dict.has(it.word)) dict.set(it.word, it); }));
+  const out = [], seen = new Set(), chars = [...zh];
+  for(let i=0; i<chars.length;){
+    let hit = null;
+    for(let len=Math.min(5, chars.length-i); len>=1 && !hit; len--){ const w = chars.slice(i, i+len).join(""); if(dict.has(w)) hit = dict.get(w); }
+    if(hit){ if(!seen.has(hit.word)){ seen.add(hit.word); out.push(hit); } i += [...hit.word].length; } else i++;
+  }
+  return out;
+}
+
+let tst = null;
+function startTranslate(items){
+  audio();
+  const dir = profile.settings.tdir || "mix";
+  deck = items.map(it => ({ ...it, dir: dir==="mix" ? (Math.random()<0.5 ? "en2zh" : "zh2en") : dir }));
+  idx = 0; sess = { type:"translate", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
+  show("tstage"); showTrans();
+}
+function showTrans(){
+  const it = deck[idx], toZh = it.dir==="en2zh";
+  tst = { hinted:false, done:false, judging:false };
+  $("tCount").textContent = `Sentence ${idx+1} of ${deck.length}`;
+  $("tScore").textContent = `${sess.clean} right · ${sess.hinted} with help · ${sess.failed} missed`;
+  $("tBar").style.width = (idx/deck.length*100)+"%";
+  $("tTag").textContent = (it.again ? "🔁 Again · " : "") + it.section;
+  $("tDir").textContent = toZh ? "Translate into Chinese" : "Translate into English";
+  $("tPrompt").className = "tprompt" + (toZh ? "" : " zh");
+  $("tPrompt").innerHTML = toZh ? esc(it.english) : `<span lang="zh-CN">${esc(it.word)}</span>${sayBtn(it)}`;
+  const inp = $("tIn"); inp.value = ""; inp.disabled = false;
+  inp.lang = toZh ? "zh-CN" : "en"; inp.placeholder = toZh ? "用中文写… (type in Chinese)" : "Type the English…";
+  $("tVerdict").className = "verdict"; $("tVerdict").innerHTML = "";
+  ["tCheck","tHint","tReveal"].forEach(id => { $(id).classList.remove("hidden"); $(id).disabled = false; });
+  ["tRight","tWrong","tNext"].forEach(id => $(id).classList.add("hidden"));
+  inp.focus({preventScroll:true});
+}
+function transHint(){
+  if(tst.done || tst.judging) return;
+  const it = deck[idx], toZh = it.dir==="en2zh", kws = keyWords(it.word);
+  tst.hinted = true; $("tHint").disabled = true;
+  const v = $("tVerdict"); v.className = "verdict show info";
+  v.innerHTML = `<b>Key words</b><div class="more kw">${kws.length ? kws.map(k => toZh
+      ? `<span><span lang="zh-CN" class="han">${esc(k.word)}</span> ${pyHTML(k)} · ${esc(k.english||"")}</span>`
+      : `<span><span lang="zh-CN" class="han">${esc(k.word)}</span> · ${esc(k.english||"")}</span>`).join("") : "No list words found in this one."}</div>`;
+  $("tIn").focus();
+}
+function transCheck(){
+  if(tst.done) return transNext();
+  if(tst.judging) return;
+  const it = deck[idx], toZh = it.dir==="en2zh", input = $("tIn").value.trim();
+  if(!input){ $("tIn").focus(); return; }
+  const answers = toZh ? [it.word, ...(it.zhAlt||[])] : [it.english, ...(it.enAlt||[])];
+  const norm = toZh ? normZh : normEn, mine = norm(input);
+  if(answers.some(a => norm(a)===mine)) return transFinish(tst.hinted ? "hinted" : "clean");
+  // Not an exact match: show the differences and let the learner judge
+  const tok = s => toZh ? [...norm(s)] : norm(s).split(" ");
+  let best = null;
+  for(const a of answers){ const d = diffTokens(tok(input), tok(a)); if(!best || d.score > best.d.score) best = { a, d }; }
+  const mineT = tok(input), ansT = tok(best.a), sep = toZh ? "" : " ";
+  const youHTML = mineT.map((t,i) => best.d.inA[i] ? esc(t) : `<span class="dx">${esc(t)}</span>`).join(sep);
+  const ansHTML = ansT.map((t,i) => best.d.inB[i] ? esc(t) : `<span class="dm">${esc(t)}</span>`).join(sep);
+  tst.judging = true; $("tIn").disabled = true;
+  ["tCheck","tHint","tReveal"].forEach(id => $(id).classList.add("hidden"));
+  ["tRight","tWrong"].forEach(id => $(id).classList.remove("hidden"));
+  const v = $("tVerdict"); v.className = "verdict show info";
+  v.innerHTML = `<b>${best.d.score>=0.8 ? "Close! Compare with the answer" : "Compare with the answer"}</b>
+    <div class="more cmp"><div><small>Yours</small><span ${toZh?'lang="zh-CN"':""}>${youHTML || "–"}</span></div>
+    <div><small>Answer</small><span ${toZh?'lang="zh-CN"':""}>${ansHTML}</span></div></div>
+    <div class="more" style="color:var(--muted)">Red = not in the answer · purple = missing from yours. Does yours mean the same thing?</div>`;
+  $("tRight").focus({preventScroll:true});
+}
+function transFinish(result){
+  const it = deck[idx], toZh = it.dir==="en2zh"; tst.done = true; tst.judging = false;
+  $("tIn").disabled = true;
+  ["tCheck","tHint","tReveal","tRight","tWrong"].forEach(id => $(id).classList.add("hidden"));
+  if(!it.again){ record(it.word, result, profile.translate); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); }
+  playSound(result);
+  if((result==="failed" || result==="hinted") && (it.again||0) < 2) deck.splice(Math.min(deck.length, idx+4), 0, { ...it, again:(it.again||0)+1 });
+  const alts = toZh ? (it.zhAlt||[]) : (it.enAlt||[]).slice(0, 3);
+  const v = $("tVerdict"); v.className = "verdict show " + ({ clean:"ok", hinted:"warn", failed:"bad" }[result]);
+  v.innerHTML = `<b>${{ clean:"✓ Correct!", hinted:"✓ Right, with help", failed:"✗ Here's the answer" }[result]}</b>
+    <div class="more tans"><span lang="zh-CN" class="han">${esc(it.word)}</span>${sayBtn(it)}</div>
+    <div class="more">${esc(it.english)}</div>
+    ${alts.length ? `<div class="more" style="color:var(--muted)">Also fine: ${alts.map(esc).join(" · ")}</div>` : ""}`;
+  if(profile.settings.sound && toZh) setTimeout(() => say(it.word), 450);
+  $("tScore").textContent = `${sess.clean} right · ${sess.hinted} with help · ${sess.failed} missed`;
+  $("tBar").style.width = ((idx+1)/deck.length*100)+"%";
+  $("tNext").classList.remove("hidden"); $("tNext").textContent = idx+1>=deck.length ? "Finish" : "Next →";
+  $("tNext").focus({preventScroll:true});
+}
+function transNext(){ idx++; if(idx>=deck.length) return endSession(false); showTrans(); }
+function wireTranslate(){
+  $("tForm").onsubmit = e => { e.preventDefault(); transCheck(); };
+  $("tIn").addEventListener("keydown", e => { if(e.key==="Enter" && !e.shiftKey && !e.isComposing && e.keyCode!==229){ e.preventDefault(); transCheck(); } });
+  $("tCheck").onclick = transCheck; $("tHint").onclick = transHint;
+  $("tReveal").onclick = () => { if(!tst.done) transFinish("failed"); };
+  $("tRight").onclick = () => transFinish(tst.hinted ? "hinted" : "clean");
+  $("tWrong").onclick = () => transFinish("failed");
+  $("tSkip").onclick = () => { if(tst.done) transNext(); else transFinish("failed"); };
+  $("tNext").onclick = transNext; $("tQuit").onclick = () => endSession(false);
+}
+
 /* ---------------- Wire up ---------------- */
-wirePinyin();
-$("optPractice").onchange = () => { profile.settings.practice = $("optPractice").value; saveDB(); syncPracticeUI(); renderHome(); };
-function syncPracticeUI(){ $("optPractice").value = profile.settings.practice || "write"; $("optPinyinLbl").hidden = isPinyinPractice(); }
+wirePinyin(); wireTranslate();
+const PRACTICE_DESC = { write:"Draw each character stroke by stroke from its English meaning.",
+  pinyin:"See the character and type its full pinyin, tones included.",
+  translate:"Translate sentences built from this list's words, English ↔ Chinese." };
+document.querySelectorAll("#optPractice button").forEach(b => b.onclick = () => { profile.settings.practice = b.dataset.v; saveDB(); renderHome(); });
+$("optDir").onchange = () => { profile.settings.tdir = $("optDir").value; saveDB(); };
+function syncPracticeUI(){
+  const p = profile.settings.practice || "write", t = p==="translate";
+  document.querySelectorAll("#optPractice button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v===p)));
+  $("practiceDesc").textContent = PRACTICE_DESC[p] || "";
+  $("optPinyinLbl").hidden = p!=="write"; $("optDir").hidden = !t; $("optDir").value = profile.settings.tdir || "mix";
+  const o = $("optMode").options;
+  o[0].text = t ? "All sentences" : "All words (new ones taught first)";
+  o[1].text = t ? "Sentences I haven't mastered" : "Words I haven't mastered";
+  o[2].text = t ? "New sentences only" : "Learn new words only";
+}
 syncPracticeUI();
 $("listSel").onchange = e => { curList = allLists().find(l=>l.id===e.target.value); profile.settings.lastList = curList.id; saveDB(); renderHome(); };
 $("optMode").onchange = updateDeckInfo;

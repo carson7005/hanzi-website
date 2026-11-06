@@ -1,0 +1,82 @@
+"use strict";
+/* Translation practice sentences, written to use only words from that lesson and earlier ones.
+   Each entry: [section, Chinese, English, [other accepted English], [other accepted Chinese]]
+   Lists without an entry here use the example phrases from their .docx instead. */
+const SENTENCES = {
+  L1: [
+    ["Text 1", "你好！我叫马大为。", "Hello! My name is Ma Dawei.", ["Hi, my name is Ma Dawei.", "Hello, I am called Ma Dawei.", "Hello, I am Ma Dawei.", "Hi, I'm Ma Dawei."]],
+    ["Text 1", "请问，你叫什么名字？", "May I ask, what is your name?", ["Excuse me, what is your name?", "May I ask what your name is?", "What is your name, may I ask?"]],
+    ["Text 1", "我姓宋，叫宋华。", "My surname is Song, my name is Song Hua.", ["My last name is Song and my name is Song Hua.", "My family name is Song, I'm called Song Hua."]],
+    ["Text 1", "认识你很高兴。", "I'm very happy to meet you.", ["Nice to meet you.", "Very happy to meet you.", "It's very nice to meet you.", "I am very glad to know you."], ["很高兴认识你"]],
+    ["Text 1", "我也很高兴。", "I am also very happy.", ["I'm very happy too.", "I'm also very glad.", "Me too, I'm very happy."]],
+    ["Text 1", "他姓马，不姓宋。", "His surname is Ma, not Song.", ["His last name is Ma, not Song.", "His family name is Ma, it isn't Song."]],
+    ["Text 2", "林娜在吗？", "Is Lin Na in?", ["Is Lin Na here?", "Is Lin Na there?", "Is Lin Na home?"]],
+    ["Text 2", "请进！请坐！", "Please come in! Please sit down!", ["Please come in, please sit.", "Come in please, sit down please."]],
+    ["Text 2", "你最近怎么样？", "How have you been recently?", ["How are you recently?", "How have you been lately?", "How are you doing lately?", "How are you these days?"]],
+    ["Text 2", "我很忙，你呢？", "I'm very busy, and you?", ["I am very busy, how about you?", "I'm very busy, what about you?"]],
+    ["Text 2", "我不太忙，谢谢。", "I'm not too busy, thanks.", ["I am not very busy, thank you.", "I'm not too busy, thank you."], ["我不太忙谢谢你"]],
+    ["Text 2", "丁力波最近很忙吗？", "Has Ding Libo been very busy recently?", ["Is Ding Libo very busy lately?", "Is Ding Libo very busy recently?"]],
+    ["Supplementary", "她很累，也很困。", "She is very tired, and also very sleepy.", ["She's very tired and very sleepy too.", "She is very tired and sleepy."]],
+    ["Supplementary", "你饿吗？我不饿，我很渴。", "Are you hungry? I'm not hungry, I'm very thirsty.", ["Are you hungry? No, I'm very thirsty.", "Are you hungry? I am not hungry, I am very thirsty."]],
+    ["Supplementary", "他最近还行。", "He's been okay recently.", ["He has been not bad lately.", "He is doing okay recently.", "He's not bad lately."]],
+    ["Supplementary", "我最近马马虎虎。", "I've been so-so recently.", ["I am so so lately.", "Recently I've been so-so."]]
+  ],
+  L2: [
+    ["Text 1", "陈老师，早上好！", "Good morning, Teacher Chen!", ["Teacher Chen, good morning!", "Good morning, Professor Chen!"]],
+    ["Text 1", "这是我朋友，他是美国人。", "This is my friend, he is American.", ["This is my friend, he's from the United States.", "This is my friend. He is an American."]],
+    ["Text 1", "您贵姓？", "What is your surname?", ["May I ask your surname?", "What's your last name?", "What is your family name?"]],
+    ["Text 1", "你是哪国人？", "What country are you from?", ["Which country are you from?", "What nationality are you?", "Where are you from?"]],
+    ["Text 1", "我们刚到北京。", "We just arrived in Beijing.", ["We have just arrived in Beijing.", "We just got to Beijing."]],
+    ["Text 1", "我学习汉语。", "I study Chinese.", ["I am studying Chinese.", "I learn Chinese."]],
+    ["Text 1", "老师再见！", "Goodbye, teacher!", ["Bye, teacher!", "See you, teacher!"]],
+    ["Text 2", "点心很好吃。", "The dim sum is delicious.", ["Dim sum is very tasty.", "The snacks are very delicious.", "The dim sum is very good."]],
+    ["Text 2", "爸爸和妈妈都喜欢吃饺子。", "Dad and Mom both like to eat dumplings.", ["Mom and Dad both like eating dumplings.", "Dad and Mom both like dumplings.", "My dad and mom both like to eat dumplings."]],
+    ["Text 2", "我要吃面条，你要吃什么？", "I want to eat noodles, what do you want to eat?", ["I'd like noodles, what would you like?", "I want noodles, what do you want to eat?"]],
+    ["Text 2", "这是大包子，那是小包子。", "This is a big bun, that is a small bun.", ["This is a big steamed bun and that is a small steamed bun."]],
+    ["Text 2", "王小云是上海人。", "Wang Xiaoyun is from Shanghai.", ["Wang Xiaoyun is a Shanghai person.", "Wang Xiaoyun is from Shanghai."]],
+    ["Text 2", "她喜欢吃米饭和面条。", "She likes to eat rice and noodles.", ["She likes eating rice and noodles.", "She likes rice and noodles."]],
+    ["Supplementary", "我同学是加拿大人。", "My classmate is Canadian.", ["My classmate is from Canada.", "My classmate is a Canadian."]],
+    ["Supplementary", "我们都喜欢吃比萨饼和汉堡包。", "We all like to eat pizza and hamburgers.", ["We all like eating pizza and hamburgers.", "We both like pizza and hamburgers."]],
+    ["Supplementary", "你们是日本人吗？不，我们是韩国人。", "Are you Japanese? No, we are Korean.", ["Are you all Japanese? No, we're Korean.", "Are you Japanese? No, we're from Korea."]]
+  ],
+  L3: [
+    ["Text 1", "你家有几口人？", "How many people are in your family?", ["How many people are there in your family?", "How many people does your family have?"]],
+    ["Text 1", "我家一共有三口人。", "There are three people in my family altogether.", ["My family has three people altogether.", "My family has three people in total.", "There are three people in my family in total."]],
+    ["Text 1", "这是谁的照片？", "Whose photo is this?", ["Whose picture is this?", "Whose photograph is this?"]],
+    ["Text 1", "我姐姐是医生，她工作很忙。", "My older sister is a doctor, she is very busy with work.", ["My elder sister is a doctor and her work is very busy.", "My older sister is a doctor, her job is very busy."]],
+    ["Text 1", "你有哥哥吗？我没有哥哥，我有一个弟弟。", "Do you have an older brother? I don't have an older brother, I have a younger brother.", ["Do you have an elder brother? I have no elder brother, I have a younger brother."]],
+    ["Text 1", "我妹妹有一只小狗。", "My younger sister has a puppy.", ["My little sister has a puppy.", "My younger sister has a little dog."]],
+    ["Text 1", "他做什么工作？", "What work does he do?", ["What does he do for work?", "What is his job?", "What job does he do?"]],
+    ["Text 2", "你要喝什么？我要喝咖啡。", "What do you want to drink? I want to drink coffee.", ["What would you like to drink? I'd like coffee.", "What do you want to drink? I want coffee."]],
+    ["Text 2", "她的女儿今年几岁？", "How old is her daughter this year?", ["How old is her daughter?"]],
+    ["Text 2", "他今年六岁。", "He is six years old this year.", ["He's six this year.", "He is six years old."]],
+    ["Text 2", "我今天晚上有钢琴课。", "I have a piano lesson tonight.", ["I have piano class this evening.", "I have a piano class tonight.", "Tonight I have a piano lesson."]],
+    ["Text 2", "这张照片真漂亮！", "This photo is really beautiful!", ["This picture is really pretty!", "This photo is so beautiful!"]],
+    ["Text 2", "他有两个孩子。", "He has two children.", ["He has two kids."]],
+    ["Text 2", "陆雨平的妈妈喜欢喝茶。", "Lu Yuping's mom likes to drink tea.", ["Lu Yuping's mother likes drinking tea.", "Lu Yuping's mom likes tea."]],
+    ["Supplementary", "王先生是律师，王太太是记者。", "Mr. Wang is a lawyer, Mrs. Wang is a reporter.", ["Mr. Wang is a lawyer and Mrs. Wang is a journalist."]],
+    ["Supplementary", "我要一杯牛奶，他要一杯橙汁。", "I want a glass of milk, he wants a glass of orange juice.", ["I'd like a cup of milk and he'd like a cup of orange juice.", "I want a cup of milk, he wants a cup of orange juice."]],
+    ["Supplementary", "她哥哥很帅。", "Her older brother is very handsome.", ["Her elder brother is very handsome.", "Her big brother is really handsome."]],
+    ["Supplementary", "我爸爸是工程师，我妈妈是经理。", "My dad is an engineer, my mom is a manager.", ["My father is an engineer and my mother is a manager."]]
+  ],
+  L4: [
+    ["Text 1", "我明天上午有语法课。", "I have a grammar class tomorrow morning.", ["Tomorrow morning I have grammar class.", "I have a grammar lesson tomorrow morning."], ["明天上午我有语法课"]],
+    ["Text 1", "我们一起去看电影吧！", "Let's go see a movie together!", ["Let's go watch a movie together!", "Let's go see a film together!", "Let us go watch a film together."]],
+    ["Text 1", "恐怕我没有时间。", "I'm afraid I don't have time.", ["I'm afraid I have no time.", "I am afraid I do not have time."], ["我恐怕没有时间"]],
+    ["Text 1", "我们下午练习口语。", "We practice speaking in the afternoon.", ["In the afternoon we practice speaking.", "We practice spoken language in the afternoon.", "We practise speaking in the afternoon."], ["下午我们练习口语"]],
+    ["Text 1", "汉字很难，语法不太难。", "Chinese characters are very difficult, grammar isn't too difficult.", ["Chinese characters are hard, grammar is not too hard.", "Characters are very hard but grammar is not very hard."]],
+    ["Text 1", "对了，明天你来吗？", "By the way, are you coming tomorrow?", ["By the way, will you come tomorrow?", "Oh right, are you coming tomorrow?"], ["对了你明天来吗"]],
+    ["Text 2", "现在几点？现在八点半。", "What time is it now? It's half past eight.", ["What time is it? It's eight thirty.", "What time is it now? It is 8:30 now.", "What time is it now? It's half past eight now."]],
+    ["Text 2", "现在差五分九点。", "It's five to nine now.", ["It's five minutes to nine now.", "It is five minutes to nine.", "It's 8:55 now."]],
+    ["Text 2", "听说你们班的活动很有意思。", "I heard your class's activity is very interesting.", ["I heard that your class activity is very interesting.", "I hear your class's event is really interesting."]],
+    ["Text 2", "我们班女生多，男生少。", "Our class has many female students and few male students.", ["In our class there are many girls and few boys.", "Our class has lots of female students and not many male students."]],
+    ["Text 2", "你们班有多少学生？", "How many students are in your class?", ["How many students does your class have?", "How many students are there in your class?"]],
+    ["Text 2", "他只说汉语。", "He only speaks Chinese.", ["He speaks only Chinese."]],
+    ["Text 2", "你学什么专业？", "What is your major?", ["What do you major in?", "What major are you studying?", "What are you majoring in?"]],
+    ["Text 2", "好主意！我们回学校吧。", "Good idea! Let's go back to school.", ["Good idea, let's return to school.", "Good idea! Let's head back to school."]],
+    ["Supplementary", "你几点起床？", "What time do you get up?", ["When do you get up?", "What time do you wake up?"]],
+    ["Supplementary", "我晚上十一点睡觉。", "I go to sleep at eleven at night.", ["I go to bed at eleven in the evening.", "I sleep at eleven at night.", "I go to sleep at 11 pm."]],
+    ["Supplementary", "我喜欢运动，特别喜欢打球。", "I like sports, especially playing ball.", ["I like exercising, I especially like playing ball.", "I like sports and I especially like to play ball."]],
+    ["Supplementary", "历史课很有意思，经济课很容易。", "History class is very interesting, economics class is very easy.", ["History class is interesting and economics class is easy."]]
+  ]
+};

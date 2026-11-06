@@ -19,14 +19,21 @@ There are no accounts. Progress and settings are saved in this browser (localSto
 on any device loads your progress. You can also paste the link/code, or use a downloaded backup file. Loading always
 combines with what's there (newest result per word wins). The home screen reminds you when there's unsaved progress.
 
-## Practice types
-- **✍️ Write characters**: draw each hanzi stroke by stroke.
-- **🔤 Pinyin & tones**: see the hanzi, type its pinyin with tone numbers (`ni3 hao3`) or marks (`nǐ hǎo`). New words get a
+## Practice types (tabs on the home screen)
+- **✍️ Writing**: draw each hanzi stroke by stroke from its English meaning.
+- **🔤 Pinyin**: see the hanzi, type its full pinyin with tone numbers (`ni3 hao3`) or marks (`nǐ hǎo`). New words get a
   study card first. Wrong answers say which syllable is off (spelling or tone), and missed words come back later in the round.
-  Pinyin is coloured by tone everywhere (1 red · 2 orange · 3 green · 4 blue · neutral grey), and 🔊 plays the word.
+- **🌐 Translate**: translate sentences English → Chinese, Chinese → English, or both. Exact matches (ignoring punctuation,
+  capitals, a/the, contractions) are marked right; otherwise you see the differences and judge it yourself.
+  Sentences live in `sentences.js` under the lesson number (`L1`, `L2`, …, matched from the list name). A list with no
+  sentences there uses its own example phrases instead.
+
+Pinyin is coloured by tone everywhere (1 red · 2 orange · 3 green · 4 blue · neutral grey), and 🔊 plays the word.
+Each practice type has its own progress.
 
 ## Files
 - `index.html`, `style.css`, `app.js` – the app
+- `sentences.js` – translation sentences per lesson
 - `pinyin.js` – splits pinyin into syllables and checks answers
 - `data.js` – built-in L3 list (added to every new profile)
 - `vendor/` – Hanzi Writer + JSZip (MIT). Stroke data is fetched per character from the jsDelivr CDN.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hanzi Drill</title>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <div class="wrap">
@@ -21,6 +21,12 @@
       <span></span>
       <button id="bnCopy" class="primary">💾 Copy progress link</button>
     </div>
+    <div class="tabs" id="optPractice" role="tablist" aria-label="What to practice">
+      <button role="tab" data-v="write"><span>✍️</span> Writing</button>
+      <button role="tab" data-v="pinyin"><span>🔤</span> Pinyin</button>
+      <button role="tab" data-v="translate"><span>🌐</span> Translate</button>
+    </div>
+    <p class="sub tabdesc" id="practiceDesc"></p>
     <section class="panel" aria-label="Setup">
       <div class="row sp">
         <select id="listSel" aria-label="Vocab list"></select>
@@ -28,14 +34,15 @@
       <div class="chips" id="sections" style="margin-top:12px" role="group" aria-label="Sections"></div>
       <div class="row sp" style="margin-top:12px">
         <div class="row">
-          <select id="optPractice" aria-label="What to practice">
-            <option value="write">✍️ Write characters</option>
-            <option value="pinyin">🔤 Pinyin &amp; tones</option>
-          </select>
           <select id="optMode" aria-label="Which words">
             <option value="all">All words (new ones taught first)</option>
             <option value="weak">Words I haven't mastered</option>
             <option value="learn">Learn new words only</option>
+          </select>
+          <select id="optDir" aria-label="Translation direction">
+            <option value="mix">Both directions</option>
+            <option value="en2zh">English → Chinese</option>
+            <option value="zh2en">Chinese → English</option>
           </select>
           <label class="opt"><input type="checkbox" id="optShuffle"> Shuffle</label>
           <label class="opt" id="optPinyinLbl"><input type="checkbox" id="optPinyin"> Show pinyin</label>
@@ -104,6 +111,30 @@
     <p class="sub" style="margin:14px 0 0">Type a tone number after each syllable: ma1 mā · ma2 má · ma3 mǎ · ma4 mà · ma (or ma5) for neutral. Type v for ü. Tone marks work too.</p>
   </section>
 
+  <!-- Translate drill -->
+  <section class="panel stage hidden" id="tstage">
+    <div class="progress"><span id="tCount" class="stat"></span><span id="tScore" class="stat"></span></div>
+    <div class="bar"><i id="tBar"></i></div>
+    <div class="sub" id="tTag"></div>
+    <div class="tdir" id="tDir"></div>
+    <div class="tprompt" id="tPrompt"></div>
+    <form id="tForm" class="tform" autocomplete="off">
+      <textarea id="tIn" rows="2" autocapitalize="off" spellcheck="false" aria-label="Your translation"></textarea>
+    </form>
+    <div class="verdict" id="tVerdict" aria-live="polite"></div>
+    <div class="actions">
+      <button class="primary" id="tCheck">Check</button>
+      <button id="tHint">Hint: key words</button>
+      <button id="tReveal">Show answer</button>
+      <button id="tRight" class="primary hidden">✓ Mine means the same</button>
+      <button id="tWrong" class="hidden">✗ I got it wrong</button>
+      <button id="tSkip">Skip</button>
+      <button id="tNext" class="primary hidden">Next →</button>
+      <button id="tQuit">End session</button>
+    </div>
+    <p class="sub" style="margin:14px 0 0">Punctuation, capitals and small words like "a"/"the" don't matter. If your wording is different but means the same, mark it right.</p>
+  </section>
+
   <section class="panel summary hidden" id="summary"></section>
 </div>
 
@@ -131,8 +162,9 @@
 
 <script src="vendor/hanzi-writer.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
-<script src="pinyin.js?v=5"></script>
-<script src="data.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="pinyin.js?v=6"></script>
+<script src="sentences.js?v=6"></script>
+<script src="data.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
