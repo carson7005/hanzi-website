@@ -35,7 +35,7 @@ function loadState(){
   return freshState();
 }
 function saveDB(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(profile)); }
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(profile)); if(typeof Cloud!=="undefined") Cloud.schedule(); }
   catch(e){ $("loadErr").textContent = "Couldn't save to this browser's storage. Use Export to keep your progress."; }
 }
 
@@ -171,7 +171,9 @@ function show(which){
 }
 function renderUserBar(){
   $("userBar").innerHTML = `<button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"🔔 Sound on":"🔕 Sound off"}</button>
+    ${typeof Cloud!=="undefined" && Cloud.enabled() ? `<button id="ubCloud" class="cloud ${Cloud.status()}" title="Sync progress across devices">${CLOUD_LABEL[Cloud.status()]||"☁️ Sync"}</button>` : ""}
     <button id="ubSync" title="Save your progress as a link, or load it on another device">💾 Save / load</button>`;
+  if($("ubCloud")) $("ubCloud").onclick = openSync;
   $("ubSound").onclick = () => { profile.settings.sound = !profile.settings.sound; saveDB(); renderUserBar(); if(profile.settings.sound) playSound("clean"); };
   $("ubSync").onclick = openSync;
 }
@@ -263,7 +265,31 @@ async function copyProgressLink(msgEl){
   }
 }
 
+const CLOUD_LABEL = { off:"☁️ Sync", signedout:"☁️ Sign in to sync", syncing:"☁️ Syncing…", synced:"☁️ Synced", offline:"☁️ Offline", error:"☁️ Sync problem" };
+/* Cloud section at the top of the Save / load panel. */
+function renderCloudBox(){
+  const box = $("cloudBox"); if(!box) return;
+  if(typeof Cloud==="undefined" || !Cloud.enabled()){ box.hidden = true; return; }
+  box.hidden = false;
+  const u = Cloud.user(), st = Cloud.status();
+  if(!u){
+    box.innerHTML = `<h3>Sync across devices</h3>
+      <p class="sub" style="margin-top:0">Sign in with Google and your progress saves to the cloud automatically. Sign in on any device to pick up where you left off. No links needed.</p>
+      <button class="primary" id="cSignIn" ${st==="off"||st==="error"?"disabled":""}>Sign in with Google</button>
+      ${st==="error" ? `<p class="sub" style="color:var(--bad)">Cloud sync couldn't start. Check your connection and reload.</p>` : ""}`;
+    $("cSignIn").onclick = () => Cloud.signIn();
+  } else {
+    const note = { syncing:"Syncing…", synced:"✓ Up to date. Progress syncs automatically.", offline:"Offline. Will sync when you're back online.", error:"Last sync failed. It'll retry on your next answer." }[st] || "";
+    box.innerHTML = `<h3>Sync across devices</h3>
+      <p style="margin:0 0 6px">Signed in as <b>${esc(u.displayName || u.email || "you")}</b>${u.email && u.displayName ? ` <span class="sub">(${esc(u.email)})</span>` : ""}</p>
+      <p class="sub" style="margin:0 0 8px">${note}</p>
+      <div class="row"><button id="cSync">Sync now</button><button id="cSignOut">Sign out</button></div>`;
+    $("cSync").onclick = () => Cloud.syncNow();
+    $("cSignOut").onclick = () => Cloud.signOut();
+  }
+}
 function openSync(){
+  renderCloudBox();
   const d = $("syncDlg"); $("dMsg").textContent = ""; $("dLink").hidden = true; $("dPaste").value = "";
   $("dShare").hidden = !navigator.share;
   if(!d.open) d.showModal();
@@ -299,7 +325,7 @@ function flash(msg, kind){ const f = $("flash"); f.className = "flash " + (kind|
 function renderBackupNote(){
   const el = $("backupNote"); if(!el) return;
   const b = profile.backup || {}, any = ["progress","pinyin","translate"].some(k => Object.keys(profile[k]).length);
-  if(!any || (b.ts && !b.changes)){ el.hidden = true; return; }
+  if(!any || (b.ts && !b.changes) || (typeof Cloud!=="undefined" && Cloud.user())){ el.hidden = true; return; }
   el.hidden = false;
   el.querySelector("span").textContent = b.ts
     ? `${b.changes} answer${b.changes===1?"":"s"} since you last saved a progress link.`
@@ -1010,4 +1036,5 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
 renderHome();                                   // shows the page immediately; lists fill in once loaded
 loadFromHash();
+if(typeof Cloud!=="undefined") Cloud.init();
 loadSharedLists().then(() => { if(!$("screenHome").classList.contains("hidden")) renderHome(); });

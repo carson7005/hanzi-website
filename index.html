@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hanzi Drill</title>
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <div class="wrap">
@@ -141,6 +141,7 @@
 
 <dialog id="syncDlg" aria-labelledby="dTitle">
   <h2 class="sec" id="dTitle">Save &amp; load progress</h2>
+  <div id="cloudBox" class="cloudbox" hidden></div>
   <p class="sub">Progress is saved in this browser as you go. Clearing browsing data, or switching device, loses it, so keep a progress link.</p>
   <h3>Save</h3>
   <div class="row">
@@ -166,6 +167,8 @@
 <script src="pinyin.js?v=6"></script>
 <script src="sentences.js?v=6"></script>
 <script src="data.js?v=6"></script>
-<script src="app.js?v=7"></script>
+<script src="firebase-config.js?v=8"></script>
+<script src="cloud.js?v=8"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

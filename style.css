@@ -146,3 +146,6 @@ select{background:var(--card2)}
 .qform input[type=text]:focus,input[type=text]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
 button.learn{border-color:rgba(139,92,246,.55);color:#d8ccff;background:rgba(139,92,246,.14)}
 button.learn:hover{background:rgba(139,92,246,.24);border-color:var(--accent2)}
+.cloudbox{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:4px 14px 14px;margin:10px 0 4px}
+.cloudbox h3{margin-top:12px}
+button.cloud.synced{color:var(--ok)} button.cloud.error,button.cloud.offline{color:var(--warn)}
