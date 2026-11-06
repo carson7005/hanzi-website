@@ -20,7 +20,8 @@ on any device loads your progress. You can also paste the link/code, or use a do
 combines with what's there (newest result per word wins). The home screen reminds you when there's unsaved progress.
 
 ## Practice types (tabs on the home screen)
-- **✍️ Writing**: draw each hanzi stroke by stroke from its English meaning.
+- **✍️ Writing**: draw each hanzi stroke by stroke from its English meaning. Press **📖 Learn** on a word you don't know yet
+  for a guided Watch → Trace → Copy lesson, then draw it from memory (counts as needing review).
 - **🔤 Pinyin**: see the hanzi, type its full pinyin with tone numbers (`ni3 hao3`) or marks (`nǐ hǎo`). New words get a
   study card first. Wrong answers say which syllable is off (spelling or tone), and missed words come back later in the round.
 - **🌐 Translate**: translate sentences English → Chinese, Chinese → English, or both. Exact matches (ignoring punctuation,

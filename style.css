@@ -144,3 +144,5 @@ select{background:var(--card2)}
 .dx{color:var(--bad);text-decoration:line-through;text-decoration-thickness:2px}
 .dm{color:#d8ccff;background:rgba(139,92,246,.28);border-radius:4px;padding:0 2px}
 .qform input[type=text]:focus,input[type=text]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
+button.learn{border-color:rgba(139,92,246,.55);color:#d8ccff;background:rgba(139,92,246,.14)}
+button.learn:hover{background:rgba(139,92,246,.24);border-color:var(--accent2)}

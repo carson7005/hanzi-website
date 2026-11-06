@@ -354,10 +354,11 @@ function updateDeckInfo(){
     $("start").disabled = n===0; return;
   }
   const items = selectedItems(), mode = $("optMode").value, nNew = items.filter(isNew).length;
-  const n = mode==="learn" ? nNew : items.length;
+  const n = mode==="learn" ? nNew : items.length, writing = !isPinyinPractice();
   let msg = "No vocab list found.";
   if(curList){
-    msg = mode==="learn" ? `${nNew} new word${nNew===1?"":"s"} to learn, in batches of ${BATCH}`
+    msg = writing ? (mode==="learn" ? `${nNew} new word${nNew===1?"":"s"}` : `${n} word${n===1?"":"s"} in this drill` + (nNew ? ` · ${nNew} not practiced yet` : "")) + " · press 📖 Learn on any word you don't know yet"
+        : mode==="learn" ? `${nNew} new word${nNew===1?"":"s"} to learn, in batches of ${BATCH}`
         : `${n} word${n===1?"":"s"} in this drill` + (nNew ? ` · ${nNew} new (taught first, step by step)` : "");
   }
   $("deckInfo").textContent = msg;
@@ -394,6 +395,12 @@ function startSession(){
   if(isTranslatePractice()){ let t = translateItems(); if($("optShuffle").checked) t = shuffle(t.slice()); if(t.length) startTranslate(t); return; }
   const items = selectedItems(), mode = $("optMode").value;
   const fresh = items.filter(isNew);
+  if(!isPinyinPractice()){                                       // writing: straight to the quiz; "Learn" is optional per word
+    let list = mode==="learn" ? fresh : items;
+    if($("optShuffle").checked) list = shuffle(list.slice());
+    if(list.length) startDrill(list.map(it => ({...it})), true);
+    return;
+  }
   let known = items.filter(it => !isNew(it));
   const entries = [];
   for(let i=0;i<fresh.length;i+=BATCH){                         // learn 5, then recall those 5 from a blank grid
@@ -422,7 +429,7 @@ function showItem(){
   const it = deck[idx]; finished = false;
   $("pCount").textContent = `Word ${idx+1} of ${deck.length}`; updateScore();
   $("pBar").style.width = (idx/deck.length*100)+"%";
-  $("secTag").textContent = it.phase==="recall" ? "Recall check · " + it.section : it.section;
+  $("secTag").textContent = it.learned ? "From memory, after learning · " + it.section : it.phase==="recall" ? "Recall check · " + it.section : it.section;
   $("prompt").textContent = it.english || ("Pinyin: " + it.pinyin);
   $("hint").textContent = (profile.settings.pinyin && it.english) ? it.pinyin : "";
   $("verdict").className = "verdict"; $("verdict").innerHTML = "";
@@ -430,7 +437,18 @@ function showItem(){
   ["bHint","bReveal","bRetry","bSkip"].forEach(id=>$(id).disabled=false);
   if(it.phase==="learn"){ learnStage = 0; enterLearnStage(); return; }
   learnStage = null; setLearnUI(false);
+  $("bLearn").classList.toggle("hidden", !!it.learned || isMastered(it.word)); $("bLearn").disabled = false;
   buildBoxes(true);
+}
+/* Optional guided lesson for the current word: watch -> trace -> copy, then back to drawing it from memory. */
+function startLearn(){
+  const it = deck[idx];
+  if(finished || it.phase==="learn") return;
+  writers.forEach(w => { try{ w.cancelQuiz(); }catch(e){} });
+  if(boxEls[charIdx]) clearOverlay(charIdx);
+  it.phase = "learn"; it.learned = true; learnStage = 0;
+  $("bLearn").classList.add("hidden");
+  enterLearnStage();
 }
 function hintsLeft(){ return HINTS_PER_WORD - itemState.hintsUsed; }
 function updateHintBtn(){ $("bHint").textContent = `Hint (${hintsLeft()})`; $("bHint").disabled = finished || hintsLeft()<=0; }
@@ -520,8 +538,9 @@ function useHint(){
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function setLearnUI(on){
   ["bHint","bReveal"].forEach(id => $(id).classList.toggle("hidden", on));
+  if(on) $("bLearn").classList.add("hidden");
   if(!on){ $("bReplay").classList.add("hidden"); $("bRetry").classList.remove("hidden"); }
-  $("stageNote").textContent = on ? `Guided practice, nothing here is scored. After every ${BATCH} new words you'll recall them from a blank grid.`
+  $("stageNote").textContent = on ? "Guided practice, nothing here is scored. After the copy step you'll draw it from memory. Skip jumps straight there."
                                   : "Draw each stroke in order. You get 3 hints per word; each shows only the next stroke.";
 }
 function enterLearnStage(){
@@ -562,9 +581,9 @@ function learnStageDone(){
   const v = $("verdict"); v.className = "verdict show ok";
   v.innerHTML = learnStage===1
     ? `<b>✓ Traced it!</b><div class="more">Next, copy it from just the faint outline.</div>`
-    : `<b>✓ Nicely done</b><div class="more">You'll recall this word from a blank grid in this batch's check.</div>`;
+    : `<b>✓ Nicely done</b><div class="more">Now draw it from memory on a blank grid.</div>`;
   $("bNext").classList.remove("hidden"); $("bRetry").disabled = true;
-  $("bNext").textContent = learnStage===1 ? "Next: Copy →" : (idx+1>=deck.length ? "Finish" : "Next →");
+  $("bNext").textContent = learnStage===1 ? "Next: Copy →" : "Now from memory →";
   $("bNext").focus({preventScroll:true});
 }
 
@@ -585,6 +604,9 @@ function finishItem(){
     cls="warn"; head="Couldn't check this one"; detail="Stroke data couldn't be loaded (are you offline?). Nothing was recorded.";
   } else if(st.revealed){
     cls="bad"; head="✗ Not quite — answer revealed"; result="failed"; boxEls.forEach(b=>b.classList.add("fail"));
+  } else if(it.learned){
+    cls="warn"; head="✓ Correct, after learning it"; result="hinted";
+    detail = "You went through Learn first, so it counts as needing review. Get it clean next time to master it.";
   } else if(st.hintsUsed>0){
     cls="warn"; head=`Correct — with ${st.hintsUsed} hint${st.hintsUsed===1?"":"s"}`; result="hinted";
     detail = "You drew every stroke right, but with help, so it counts as needing review.";
@@ -601,7 +623,7 @@ function finishItem(){
   updateScore(); $("pBar").style.width = ((idx+1)/deck.length*100)+"%";
   $("bNext").classList.remove("hidden"); $("bNext").textContent = idx+1>=deck.length ? "Finish" : "Next →";
   $("bNext").focus({preventScroll:true});
-  ["bHint","bReveal","bRetry"].forEach(id=>$(id).disabled=true);
+  ["bHint","bReveal","bRetry","bLearn"].forEach(id=>$(id).disabled=true);
 }
 function reveal(){
   if(finished) return;
@@ -614,6 +636,7 @@ function reveal(){
 function redraw(){ if(!finished) buildBoxes(false); }
 function next(){
   if(deck[idx].phase==="learn" && learnStage<2){ learnStage++; enterLearnStage(); return; }
+  if(deck[idx].phase==="learn"){ deck[idx].phase = undefined; showItem(); return; }   // lesson done: back to the quiz for this word
   idx++; if(idx>=deck.length) return endSession(false); showItem(); }
 function skip(){
   if(deck[idx].phase==="learn"){ watchToken++; writers.forEach(w=>{ try{w.cancelQuiz();}catch(e){} }); learnStage = 2; finished = true; return next(); }   // skipping a lesson doesn't score anything
@@ -644,7 +667,7 @@ function endSession(silent){
   show("summary");
   $("sSave").onclick = () => copyProgressLink($("sMsg"));
   if(sess.review.length){
-    const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false}])).values()];
+    const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false, learned:false}])).values()];
     $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : sess.type==="translate" ? startTranslate(r) : startDrill(r);
   }
   $("sHome").onclick = () => renderHome();
@@ -964,9 +987,9 @@ function syncPracticeUI(){
   $("practiceDesc").textContent = PRACTICE_DESC[p] || "";
   $("optPinyinLbl").hidden = p!=="write"; $("optDir").hidden = !t; $("optDir").value = profile.settings.tdir || "mix";
   const o = $("optMode").options;
-  o[0].text = t ? "All sentences" : "All words (new ones taught first)";
+  o[0].text = t ? "All sentences" : p==="write" ? "All words" : "All words (new ones taught first)";
   o[1].text = t ? "Sentences I haven't mastered" : "Words I haven't mastered";
-  o[2].text = t ? "New sentences only" : "Learn new words only";
+  o[2].text = t ? "New sentences only" : p==="write" ? "Words I haven't practiced yet" : "Learn new words only";
 }
 syncPracticeUI();
 $("listSel").onchange = e => { curList = allLists().find(l=>l.id===e.target.value); profile.settings.lastList = curList.id; saveDB(); renderHome(); };
@@ -975,7 +998,7 @@ $("optShuffle").onchange = () => { profile.settings.shuffle = $("optShuffle").ch
 $("optPinyin").onchange = () => { profile.settings.pinyin = $("optPinyin").checked; saveDB();
   if(sess && !$("stage").classList.contains("hidden") && deck[idx]) $("hint").textContent = profile.settings.pinyin ? deck[idx].pinyin : ""; };
 $("start").onclick = startSession;
-$("bHint").onclick = useHint; $("bReveal").onclick = reveal; $("bRetry").onclick = redraw;
+$("bHint").onclick = useHint; $("bLearn").onclick = startLearn; $("bReveal").onclick = reveal; $("bRetry").onclick = redraw;
 $("bReplay").onclick = () => { if(learnStage===0) playWatch(); }; $("bSkip").onclick = skip; $("bNext").onclick = next; $("bQuit").onclick = () => endSession(false);
 document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("stage").classList.contains("hidden") && !$("bNext").classList.contains("hidden") && document.activeElement.tagName!=="BUTTON" && document.activeElement.tagName!=="INPUT") next(); });
 
