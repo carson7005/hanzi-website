@@ -1,1 +1,20 @@
-{ "lists": [ { "file": "L3_Vocab_List.docx", "name": "L3 Vocab List" } ] }
+{
+ "lists": [
+  {
+   "file": "L1 Vocab List.docx",
+   "name": "L1 Vocab List"
+  },
+  {
+   "file": "L2 Vocab List.docx",
+   "name": "L2 Vocab List"
+  },
+  {
+   "file": "L3_Vocab_List.docx",
+   "name": "L3 Vocab List"
+  },
+  {
+   "file": "L4 Vocab List.docx",
+   "name": "L4 Vocab List"
+  }
+ ]
+}

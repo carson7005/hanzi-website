@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hanzi Drill</title>
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div class="wrap">
@@ -19,6 +19,7 @@
       <button role="tab" data-v="write"><span>✍️</span> Writing</button>
       <button role="tab" data-v="pinyin"><span>🔤</span> Pinyin</button>
       <button role="tab" data-v="translate"><span>🌐</span> Translate</button>
+      <button role="tab" data-v="listen"><span>🎧</span> Listen</button>
     </div>
     <p class="sub tabdesc" id="practiceDesc"></p>
     <section class="panel" aria-label="Setup">
@@ -32,6 +33,10 @@
             <option value="all">All words (new ones taught first)</option>
             <option value="weak">Words I haven't mastered</option>
             <option value="learn">Learn new words only</option>
+          </select>
+          <select id="optListen" aria-label="How to answer">
+            <option value="pinyin">Answer by typing pinyin</option>
+            <option value="write">Answer by writing the characters</option>
           </select>
           <select id="optDir" aria-label="Translation direction">
             <option value="mix">Both directions</option>
@@ -97,6 +102,7 @@
     <div class="verdict" id="qVerdict" aria-live="polite"></div>
     <div class="actions">
       <button class="primary" id="qCheck">Check</button>
+      <button id="qLearn" class="learn">📖 Learn</button>
       <button id="qHint">Hint: spelling</button>
       <button id="qReveal">Show answer</button>
       <button id="qSkip">Skip</button>
@@ -147,6 +153,14 @@
 <script src="data.js?v=6"></script>
 <script src="firebase-config.js?v=8"></script>
 <script src="cloud.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="js/core.js?v=11"></script>
+<script src="js/lists.js?v=11"></script>
+<script src="js/speech.js?v=11"></script>
+<script src="js/home.js?v=11"></script>
+<script src="js/session.js?v=11"></script>
+<script src="js/write.js?v=11"></script>
+<script src="js/pinyin-drill.js?v=11"></script>
+<script src="js/translate.js?v=11"></script>
+<script src="js/main.js?v=11"></script>
 </body>
 </html>

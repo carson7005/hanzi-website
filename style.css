@@ -145,3 +145,12 @@ button.learn:hover{background:rgba(139,92,246,.24);border-color:var(--accent2)}
 .cloudbox{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:4px 14px 14px;margin:10px 0 4px}
 .cloudbox h3{margin-top:12px}
 button.cloud.synced{color:var(--ok)} button.cloud.error,button.cloud.offline{color:var(--warn)}
+
+/* ---- v11: listen mode, 4 tabs ---- */
+.tabs{grid-template-columns:repeat(4,1fr)}
+@media (max-width:520px){ .tabs button{flex-direction:column;gap:2px;font-size:13px;padding:8px 4px} .tabs button span{font-size:18px} }
+button.play{font-size:20px;padding:12px 26px;border-radius:999px;border-color:rgba(139,92,246,.55);background:rgba(139,92,246,.16);color:#e4dcff}
+button.play:hover{background:rgba(139,92,246,.26)}
+.qword button.play{font-family:var(--sans)}
+button.linkbtn{background:none;border:0;padding:0 4px;color:var(--accent2);text-decoration:underline;font-size:inherit}
+button.linkbtn:hover{background:none;color:#c4b5fd}
