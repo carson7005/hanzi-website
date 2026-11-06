@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hanzi Drill</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <div class="wrap">
@@ -13,8 +13,14 @@
     <div class="row" id="userBar"></div>
   </header>
 
+  <div id="flash" class="flash" hidden role="status" title="Click to dismiss"></div>
+
   <!-- Home: list picker + progress -->
   <div id="screenHome" class="hidden">
+    <div class="backup-note" id="backupNote" hidden>
+      <span></span>
+      <button id="bnCopy" class="primary">💾 Copy progress link</button>
+    </div>
     <section class="panel" aria-label="Setup">
       <div class="row sp">
         <select id="listSel" aria-label="Vocab list"></select>
@@ -22,13 +28,17 @@
       <div class="chips" id="sections" style="margin-top:12px" role="group" aria-label="Sections"></div>
       <div class="row sp" style="margin-top:12px">
         <div class="row">
+          <select id="optPractice" aria-label="What to practice">
+            <option value="write">✍️ Write characters</option>
+            <option value="pinyin">🔤 Pinyin &amp; tones</option>
+          </select>
           <select id="optMode" aria-label="Which words">
             <option value="all">All words (new ones taught first)</option>
             <option value="weak">Words I haven't mastered</option>
             <option value="learn">Learn new words only</option>
           </select>
           <label class="opt"><input type="checkbox" id="optShuffle"> Shuffle</label>
-          <label class="opt"><input type="checkbox" id="optPinyin"> Show pinyin</label>
+          <label class="opt" id="optPinyinLbl"><input type="checkbox" id="optPinyin"> Show pinyin</label>
         </div>
         <button class="primary" id="start">Start drill</button>
       </div>
@@ -61,12 +71,68 @@
     <p class="sub" id="stageNote" style="margin:14px 0 0">Draw each stroke in order. You get 3 hints per word; each shows only the next stroke.</p>
   </section>
 
+  <!-- Pinyin & tones drill -->
+  <section class="panel stage hidden" id="pstage">
+    <div class="progress"><span id="qCount" class="stat"></span><span id="qScore" class="stat"></span></div>
+    <div class="bar"><i id="qBar"></i></div>
+    <div class="sub" id="qTag"></div>
+    <div class="qword" id="qWord" lang="zh-CN"></div>
+    <div class="hint" id="qEn"></div>
+    <div class="qstudy" id="qStudy" hidden></div>
+    <form id="qForm" class="qform" autocomplete="off">
+      <input type="text" id="qIn" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done"
+             placeholder="Type the pinyin, e.g. ni3 hao3" aria-label="Pinyin answer">
+      <div class="tones" role="group" aria-label="Add a tone">
+        <button type="button" data-k="1" class="t1" title="1st tone: high, flat">ā 1</button>
+        <button type="button" data-k="2" class="t2" title="2nd tone: rising">á 2</button>
+        <button type="button" data-k="3" class="t3" title="3rd tone: dip">ǎ 3</button>
+        <button type="button" data-k="4" class="t4" title="4th tone: falling">à 4</button>
+        <button type="button" data-k="5" class="t5" title="Neutral tone">a 5</button>
+        <button type="button" data-k="v" title="ü">ü</button>
+      </div>
+      <div class="qprev" id="qPrev" aria-live="polite"></div>
+    </form>
+    <div class="verdict" id="qVerdict" aria-live="polite"></div>
+    <div class="actions">
+      <button class="primary" id="qCheck">Check</button>
+      <button id="qHint">Hint: spelling</button>
+      <button id="qReveal">Show answer</button>
+      <button id="qSkip">Skip</button>
+      <button id="qNext" class="primary hidden">Next →</button>
+      <button id="qQuit">End session</button>
+    </div>
+    <p class="sub" style="margin:14px 0 0">Type a tone number after each syllable: ma1 mā · ma2 má · ma3 mǎ · ma4 mà · ma (or ma5) for neutral. Type v for ü. Tone marks work too.</p>
+  </section>
+
   <section class="panel summary hidden" id="summary"></section>
 </div>
 
+<dialog id="syncDlg" aria-labelledby="dTitle">
+  <h2 class="sec" id="dTitle">Save &amp; load progress</h2>
+  <p class="sub">Progress is saved in this browser as you go. Clearing browsing data, or switching device, loses it, so keep a progress link.</p>
+  <h3>Save</h3>
+  <div class="row">
+    <button class="primary" id="dCopy">Copy progress link</button>
+    <button id="dShare">Share…</button>
+    <button id="dFile">Download file</button>
+  </div>
+  <input type="text" id="dLink" readonly hidden aria-label="Progress link">
+  <p class="sub">Put the link in your notes or email it to yourself. Opening it on any device loads your progress.</p>
+  <h3>Load</h3>
+  <textarea id="dPaste" rows="2" placeholder="Paste a progress link or code"></textarea>
+  <div class="row">
+    <button id="dLoad">Load</button>
+    <label class="btn">Choose file…<input type="file" id="dFileIn" accept=".json,application/json"></label>
+  </div>
+  <p class="sub">Loading combines with what's here. For each word the most recent result is kept, so nothing newer gets overwritten. You can also drop a backup file anywhere on the page.</p>
+  <div class="dmsg" id="dMsg" role="status"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:8px"><button id="dClose">Done</button></div>
+</dialog>
+
 <script src="vendor/hanzi-writer.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
-<script src="data.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="pinyin.js?v=5"></script>
+<script src="data.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

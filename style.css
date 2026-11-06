@@ -86,3 +86,40 @@ h2.sec{font:600 16px Georgia,serif;margin:0 0 8px}
 .note{font-size:12px;color:var(--muted)}
 
 .verdict.info{background:var(--bg);border:1px solid var(--line);color:var(--ink)}
+
+/* ---- v5: save/load, pinyin & tones ---- */
+[hidden]{display:none!important}
+:root{--t1:#d1342c; --t2:#d97a00; --t3:#2c8a46; --t4:#2a63c9; --t5:#8a7f72}
+@media (prefers-color-scheme: dark){ :root{--t1:#ff7a6e; --t2:#ffb347; --t3:#6fd08f; --t4:#7fa8ff; --t5:#a39886} }
+.t1{color:var(--t1)} .t2{color:var(--t2)} .t3{color:var(--t3)} .t4{color:var(--t4)} .t5{color:var(--t5)}
+
+.flash{background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px;cursor:pointer}
+.flash.bad{background:var(--bad-bg);color:var(--bad)}
+.backup-note{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.backup-note button{font-size:14px;padding:6px 12px}
+
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:18px 20px;width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog h3{font:600 14px system-ui,sans-serif;margin:16px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+dialog .sub{margin:8px 0 0}
+dialog textarea,dialog input[type=text]{display:block;width:100%;font:13px ui-monospace,Menlo,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 8px;resize:vertical}
+dialog input[type=text]{margin-top:8px}
+.dmsg{font-size:14px;margin-top:8px;min-height:1px}
+.dmsg.ok{color:var(--ok)} .dmsg.bad{color:var(--bad)}
+
+.qword{font:600 clamp(48px,12vw,72px)/1.15 "Songti SC","Noto Serif CJK SC",serif;margin:6px 0 2px}
+.qstudy{margin:8px auto 4px;max-width:520px;padding:10px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.qform{max-width:420px;margin:12px auto 0}
+.qform input[type=text]{width:100%;font-size:20px;text-align:center;padding:10px 12px}
+.qform input:disabled{opacity:.6}
+.tones{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.tones button{padding:5px 11px;font-size:15px;font-weight:600}
+.tones button.t5{color:var(--t5)}
+.qprev{min-height:30px;font-size:22px;margin-top:8px;letter-spacing:.02em}
+.qans{font-size:20px;display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.qstudy .qans{justify-content:center;margin-bottom:6px}
+.ruby{display:inline-flex;gap:6px;align-items:flex-end}
+.rb{display:inline-flex;flex-direction:column-reverse;align-items:center;line-height:1.15}
+.rb b{display:block;font:500 26px "Songti SC","Noto Serif CJK SC",serif;color:var(--ink)}
+.rb i{font-style:normal;font-size:17px;font-weight:600}
+button.say{padding:2px 8px;font-size:15px;border-radius:8px;vertical-align:middle}

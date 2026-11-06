@@ -14,10 +14,19 @@ underscores become spaces). `lists/manifest.json` is an optional fallback/rename
 The page itself has no upload button; the repo's `lists/` folder is the only source of vocab.
 
 ## Where progress lives
-There are no accounts. Your progress and settings are saved in this browser (localStorage) on this device.
-**Export** downloads a backup `.json`; **Import** restores it (e.g. on another device). Clearing site data erases progress.
+There are no accounts. Progress and settings are saved in this browser (localStorage) on this device.
+**💾 Save / load** gives you a *progress link*: copy it (or share it) and keep it in your notes or email. Opening the link
+on any device loads your progress. You can also paste the link/code, or use a downloaded backup file. Loading always
+combines with what's there (newest result per word wins). The home screen reminds you when there's unsaved progress.
+
+## Practice types
+- **✍️ Write characters**: draw each hanzi stroke by stroke.
+- **🔤 Pinyin & tones**: see the hanzi, type its pinyin with tone numbers (`ni3 hao3`) or marks (`nǐ hǎo`). New words get a
+  study card first. Wrong answers say which syllable is off (spelling or tone), and missed words come back later in the round.
+  Pinyin is coloured by tone everywhere (1 red · 2 orange · 3 green · 4 blue · neutral grey), and 🔊 plays the word.
 
 ## Files
 - `index.html`, `style.css`, `app.js` – the app
+- `pinyin.js` – splits pinyin into syllables and checks answers
 - `data.js` – built-in L3 list (added to every new profile)
 - `vendor/` – Hanzi Writer + JSZip (MIT). Stroke data is fetched per character from the jsDelivr CDN.

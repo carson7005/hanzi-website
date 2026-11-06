@@ -11,12 +11,13 @@ const MASTER_STREAK = 2;           // clean results in a row to count a word as 
 
 /* ---------------- Storage (this browser only) ---------------- */
 const OLD_KEY = "hanziDrill.v1";          // earlier multi-profile version
-function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null }, progress:{}, sessions:[] }; }
+function freshState(){ return { settings:{ sound:true, shuffle:true, pinyin:false, lastList:null, practice:"write" }, progress:{}, pinyin:{}, sessions:[], backup:{ ts:0, changes:0 } }; }
 function mergeState(src){
   const st = freshState();
   if(src && typeof src==="object"){
     Object.assign(st.settings, src.settings||{});
-    st.progress = src.progress || {}; st.sessions = src.sessions || [];
+    st.progress = src.progress || {}; st.pinyin = src.pinyin || {}; st.sessions = src.sessions || [];
+    Object.assign(st.backup, src.backup||{});
   }
   return st;
 }
@@ -155,33 +156,144 @@ function allLists(){ return sharedLists; }
 
 /* ---------------- Screens ---------------- */
 function show(which){
-  ["screenHome","stage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
+  ["screenHome","stage","pstage","summary"].forEach(id => $(id).classList.toggle("hidden", id!==which));
   renderUserBar();
 }
 function renderUserBar(){
   $("userBar").innerHTML = `<button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"🔔 Sound on":"🔕 Sound off"}</button>
-    <button id="ubExport" title="Download a backup of your progress">Export</button>
-    <label class="btn" title="Restore progress from a backup file">Import<input type="file" id="importFile" accept=".json,application/json"></label>`;
+    <button id="ubSync" title="Save your progress as a link, or load it on another device">💾 Save / load</button>`;
   $("ubSound").onclick = () => { profile.settings.sound = !profile.settings.sound; saveDB(); renderUserBar(); if(profile.settings.sound) playSound("clean"); };
-  $("ubExport").onclick = exportProgress;
-  $("importFile").onchange = e => { if(e.target.files[0]) importProgress(e.target.files[0]); e.target.value = ""; };
+  $("ubSync").onclick = openSync;
 }
 
-/* ---------------- Export / import (backup file) ---------------- */
-function exportProgress(){
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({ format:"hanzi-drill-progress", version:1, exported:new Date().toISOString(), data:profile }, null, 1)], {type:"application/json"}));
-  a.download = "hanzi-drill-progress.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+/* ---------------- Save / load: progress link, code, or file ----------------
+   Progress is packed into a short code (compressed JSON) that fits in a link: <site>#p=<code>.
+   Loading always merges: for each word, the most recent result wins, so nothing newer is lost. */
+const LASTS = [null, "clean", "hinted", "failed"];
+const packStats = m => Object.fromEntries(Object.entries(m||{}).map(([w,s]) =>
+  [w, [s.seen, s.clean, s.failed, s.streak, Math.max(0, LASTS.indexOf(s.last)), Math.round((s.ts||0)/6e4)]]));
+const unpackStats = m => Object.fromEntries(Object.entries(m||{}).map(([w,a]) =>
+  [w, { seen:a[0], clean:a[1], hinted:Math.max(0, a[0]-a[1]-a[2]), failed:a[2], streak:a[3], last:LASTS[a[4]]||null, ts:a[5]*6e4 }]));
+function b64url(bytes){ let s = ""; for(let i=0;i<bytes.length;i+=8192) s += String.fromCharCode(...bytes.subarray(i, i+8192)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function unb64url(str){ const bin = atob(str.replace(/-/g,"+").replace(/_/g,"/")); const a = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i] = bin.charCodeAt(i); return a; }
+async function pipeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+async function encodeProgress(){
+  const json = JSON.stringify({ v:2, s:profile.settings, w:packStats(profile.progress), y:packStats(profile.pinyin),
+    h:(profile.sessions||[]).slice(-20).map(x => [Math.round(x.ts/6e4), x.list, x.clean, x.hinted, x.failed, x.type==="pinyin"?1:0]) });
+  const bytes = new TextEncoder().encode(json);
+  if(window.CompressionStream){ try{ return "1" + b64url(await pipeBytes(bytes, new CompressionStream("deflate-raw"))); }catch(e){} }
+  return "0" + b64url(bytes);
 }
-async function importProgress(file){
-  try{
-    const d = JSON.parse(await file.text());
-    if(d.format!=="hanzi-drill-progress" || !d.data) throw new Error("Not a Hanzi Drill progress file.");
-    if(!confirm("Replace the progress saved in this browser with the contents of this file?")) return;
-    profile = mergeState(d.data); saveDB();
-    $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
-    renderHome(); $("loadErr").textContent = "";
-  }catch(e){ $("loadErr").textContent = "Couldn't import: " + e.message; }
+async function decodeProgress(code){
+  let bytes = unb64url(code.slice(1));
+  if(code[0]==="1"){
+    if(!window.DecompressionStream) throw new Error("this browser is too old to read progress codes. Try Chrome, Edge, Firefox or Safari.");
+    bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
+  } else if(code[0]!=="0") throw new Error("that isn't a progress code.");
+  const d = JSON.parse(new TextDecoder().decode(bytes));
+  return { settings:d.s||{}, progress:unpackStats(d.w), pinyin:unpackStats(d.y),
+    sessions:(d.h||[]).map(a => ({ ts:a[0]*6e4, list:a[1], clean:a[2], hinted:a[3], failed:a[4], type:a[5]?"pinyin":"write" })) };
+}
+const progressLink = code => location.origin + location.pathname + "#p=" + code;
+
+/* Combine incoming progress with this browser's. Returns how many words changed. */
+function mergeProgress(inc){
+  const wasEmpty = !Object.keys(profile.progress).length && !Object.keys(profile.pinyin).length;
+  let changed = 0;
+  for(const key of ["progress","pinyin"]){
+    for(const [w, s] of Object.entries(inc[key]||{})){
+      const cur = profile[key][w];
+      if(!cur || (s.ts||0) > (cur.ts||0)){ profile[key][w] = s; changed++; }
+    }
+  }
+  const seen = new Set(profile.sessions.map(s => Math.round(s.ts/6e4)+"|"+s.list));
+  for(const s of inc.sessions||[]) if(!seen.has(Math.round(s.ts/6e4)+"|"+s.list)) profile.sessions.push(s);
+  profile.sessions.sort((a,b) => a.ts-b.ts); profile.sessions = profile.sessions.slice(-50);
+  if(wasEmpty && inc.settings) Object.assign(profile.settings, inc.settings);
+  profile.backup = { ts:Date.now(), changes:0 };
+  saveDB();
+  $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
+  return changed;
+}
+
+/* Accepts a progress link, a bare code, or the contents of a downloaded backup file. */
+async function loadFromText(text){
+  text = String(text||"").trim();
+  if(!text) throw new Error("paste a progress link or code first.");
+  if(text[0]==="{"){
+    const d = JSON.parse(text);
+    if(d.format!=="hanzi-drill-progress" || !d.data) throw new Error("that isn't a Hanzi Drill backup file.");
+    return mergeProgress(mergeState(d.data));
+  }
+  const m = text.match(/[#&?]p=([A-Za-z0-9_-]+)/) || text.match(/^([01][A-Za-z0-9_-]+)$/);
+  if(!m) throw new Error("that doesn't look like a progress link or code.");
+  return mergeProgress(await decodeProgress(m[1]));
+}
+const loadedMsg = n => n ? `✓ Progress loaded: ${n} word${n===1?"":"s"} updated.` : "✓ Loaded. This browser already had everything in it.";
+
+function downloadBackup(){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ format:"hanzi-drill-progress", version:2, exported:new Date().toISOString(), data:profile }, null, 1)], {type:"application/json"}));
+  a.download = `hanzi-drill-progress-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  markBackedUp();
+}
+function markBackedUp(){ profile.backup = { ts:Date.now(), changes:0 }; saveDB(); renderBackupNote(); }
+
+/* Copy the progress link. Falls back to showing it selected if the clipboard is blocked. */
+async function copyProgressLink(msgEl){
+  const link = progressLink(await encodeProgress());
+  try{ await navigator.clipboard.writeText(link); markBackedUp();
+    if(msgEl){ msgEl.className = "dmsg ok"; msgEl.textContent = "✓ Link copied. Paste it somewhere safe: your notes, or an email to yourself."; }
+    return true;
+  }catch(e){
+    openSync(); const box = $("dLink"); box.value = link; box.hidden = false; box.select();
+    $("dMsg").className = "dmsg"; $("dMsg").textContent = "Copy the selected link above (Ctrl/Cmd + C).";
+    markBackedUp(); return false;
+  }
+}
+
+function openSync(){
+  const d = $("syncDlg"); $("dMsg").textContent = ""; $("dLink").hidden = true; $("dPaste").value = "";
+  $("dShare").hidden = !navigator.share;
+  if(!d.open) d.showModal();
+}
+async function syncLoad(text){
+  try{ const n = await loadFromText(text); $("dMsg").className = "dmsg ok"; $("dMsg").textContent = loadedMsg(n); $("dPaste").value = ""; renderHome(); }
+  catch(e){ $("dMsg").className = "dmsg bad"; $("dMsg").textContent = "Couldn't load: " + e.message; }
+}
+function wireSync(){
+  $("dCopy").onclick = () => copyProgressLink($("dMsg"));
+  $("dShare").onclick = async () => { try{ await navigator.share({ title:"My Hanzi Drill progress", url:progressLink(await encodeProgress()) }); markBackedUp(); }catch(e){} };
+  $("dFile").onclick = downloadBackup;
+  $("dLoad").onclick = () => syncLoad($("dPaste").value);
+  $("dFileIn").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if(f) syncLoad(await f.text()); };
+  $("dClose").onclick = () => $("syncDlg").close();
+  // Drop a backup file anywhere on the page to load it
+  document.addEventListener("dragover", e => { if([...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
+  document.addEventListener("drop", async e => { const f = e.dataTransfer.files[0]; if(!f) return; e.preventDefault(); openSync(); syncLoad(await f.text()); });
+}
+
+/* Opening a progress link loads it, then tidies the address bar. */
+async function loadFromHash(){
+  const m = location.hash.match(/^#p=([A-Za-z0-9_-]+)/);
+  if(!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  try{ flash(loadedMsg(mergeProgress(await decodeProgress(m[1]))), "ok"); }
+  catch(e){ flash("Couldn't load progress from that link: " + e.message, "bad"); }
+  renderHome();
+}
+function flash(msg, kind){ const f = $("flash"); f.className = "flash " + (kind||""); f.textContent = msg; f.hidden = false; }
+
+/* Home reminder: how much progress hasn't been saved to a link yet. */
+function renderBackupNote(){
+  const el = $("backupNote"); if(!el) return;
+  const b = profile.backup || {}, any = Object.keys(profile.progress).length + Object.keys(profile.pinyin).length;
+  if(!any || (b.ts && !b.changes)){ el.hidden = true; return; }
+  el.hidden = false;
+  el.querySelector("span").textContent = b.ts
+    ? `${b.changes} answer${b.changes===1?"":"s"} since you last saved a progress link.`
+    : "Your progress is only saved in this browser. Save a link so you can't lose it.";
 }
 function resetProgress(){
   if(!confirm("Erase all saved progress in this browser? This can't be undone (Export first if you want a backup).")) return;
@@ -190,6 +302,7 @@ function resetProgress(){
 
 /* ---------------- Home: lists, sections, progress ---------------- */
 function renderHome(){
+  syncPracticeUI();
   const sel = $("listSel"); sel.innerHTML = "";
   const al = allLists();
   if(!curList || !al.includes(curList)) curList = al.find(l=>curList && l.id===curList.id) || al.find(l=>l.id===profile.settings.lastList) || al[0] || null;
@@ -204,9 +317,11 @@ function renderHome(){
     b.onclick = () => { if(activeSections.has(s)){ activeSections.delete(s); b.setAttribute("aria-pressed","false"); } else { activeSections.add(s); b.setAttribute("aria-pressed","true"); } updateDeckInfo(); };
     box.appendChild(b);
   });
-  updateDeckInfo(); renderProgress(); show("screenHome");
+  updateDeckInfo(); renderProgress(); renderBackupNote(); show("screenHome");
 }
-const stat = w => (profile.progress[w] || null);
+const isPinyinPractice = () => profile.settings.practice === "pinyin";
+const progMap = () => isPinyinPractice() ? profile.pinyin : profile.progress;   // writing and pinyin are tracked separately
+const stat = w => (progMap()[w] || null);
 const isMastered = w => { const s = stat(w); return !!s && s.streak >= MASTER_STREAK; };
 function selectedItems(){
   if(!curList) return [];
@@ -246,8 +361,8 @@ function renderProgress(){
     return `<span class="w ${c}" title="${esc(tip)}">${esc(i.word)}</span>`;
   }).join("");
   const recent = (profile.sessions||[]).slice(-3).reverse().map(s =>
-    `<div class="note">${new Date(s.ts).toLocaleDateString()} · ${esc(s.list)}: ${s.clean} clean, ${s.hinted} with hints, ${s.failed} missed</div>`).join("");
-  P.innerHTML = `<h2 class="sec">Progress — ${esc(curList.name)}</h2>
+    `<div class="note">${new Date(s.ts).toLocaleDateString()} · ${esc(s.list)}${s.type==="pinyin"?" (pinyin)":""}: ${s.clean} clean, ${s.hinted} with hints, ${s.failed} missed</div>`).join("");
+  P.innerHTML = `<h2 class="sec">Progress — ${esc(curList.name)} · ${isPinyinPractice() ? "pinyin &amp; tones" : "writing"}</h2>
     <div class="stats"><div><b>${mastered}/${uniq.length}</b>mastered</div><div><b>${practiced}/${uniq.length}</b>practiced</div><div><b>${att?acc+"%":"–"}</b>clean on first go</div></div>
     <div class="words">${chips}</div>
     <div class="legend"><span>■ green: mastered (${MASTER_STREAK} clean in a row)</span><span>■ yellow: last time used hints</span><span>■ red: last time missed</span><span>□ not practiced / in progress</span></div>
@@ -268,13 +383,14 @@ function startSession(){
     shuffle(b.slice()).forEach(it => entries.push({...it, phase:"recall"}));
   }
   if(mode!=="learn"){ if($("optShuffle").checked) known = shuffle(known.slice()); known.forEach(it => entries.push({...it})); }
-  if(entries.length) startDrill(entries, true);
+  if(!entries.length) return;
+  if(isPinyinPractice()) startPinyin(entries, true); else startDrill(entries, true);
 }
 function startDrill(items, keepOrder){
   audio();   // unlock audio on user gesture
   profile.settings.shuffle = $("optShuffle").checked; profile.settings.pinyin = $("optPinyin").checked; saveDB();
   deck = items.slice(); if(!keepOrder && profile.settings.shuffle) shuffle(deck);
-  idx = 0; sess = { list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
+  idx = 0; sess = { type:"write", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
   show("stage"); showItem();
 }
 function boxSize(n){
@@ -396,7 +512,7 @@ function enterLearnStage(){
   $("hint").textContent = it.pinyin;
   const instr = ["Watch the stroke order. Replay as often as you like.", "Trace each stroke. The highlighted stroke is next.", "Now draw it from just the faint outline."][learnStage];
   const v = $("verdict"); v.className = "verdict show info";
-  v.innerHTML = `<b style="font-family:'Songti SC','Noto Serif CJK SC',serif;font-size:22px">${esc(it.word)}</b> &nbsp;${esc(it.pinyin||"")}${it.english?" — "+esc(it.english):""}
+  v.innerHTML = `<b style="font-family:'Songti SC','Noto Serif CJK SC',serif;font-size:22px">${esc(it.word)}</b> &nbsp;${pyHTML(it)}${sayBtn(it)}${it.english?" — "+esc(it.english):""}
     <div class="more">${instr}</div>${it.examples && learnStage===0 ? `<div class="more" style="color:var(--muted)">${esc(it.examples)}${it.examplesEn?" · "+esc(it.examplesEn):""}</div>`:""}`;
   $("bNext").classList.toggle("hidden", learnStage!==0); $("bNext").textContent = "Next: Trace →";
   $("bReplay").classList.toggle("hidden", learnStage!==0);
@@ -433,8 +549,9 @@ function learnStageDone(){
   $("bNext").focus({preventScroll:true});
 }
 
-function record(word, result){      // result: clean | hinted | failed
-  const s = profile.progress[word] || (profile.progress[word] = { seen:0, clean:0, hinted:0, failed:0, streak:0, last:null, ts:0 });
+function record(word, result, map = profile.progress){      // result: clean | hinted | failed
+  profile.backup.changes = (profile.backup.changes||0) + 1;
+  const s = map[word] || (map[word] = { seen:0, clean:0, hinted:0, failed:0, streak:0, last:null, ts:0 });
   s.seen++; s[result]++; s.last = result; s.ts = Date.now();
   s.streak = result==="clean" ? s.streak+1 : 0;
 }
@@ -458,7 +575,7 @@ function finishItem(){
   }
   if(result){ record(it.word, result); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); playSound(result); }
   setLive("");
-  const ex = [`<b style="font-size:20px;font-family:'Songti SC','Noto Serif CJK SC',serif">${esc(it.word)}</b> &nbsp;${esc(it.pinyin||"")}${it.english?" — "+esc(it.english):""}`];
+  const ex = [`<b style="font-size:20px;font-family:'Songti SC','Noto Serif CJK SC',serif;display:inline">${esc(it.word)}</b> &nbsp;${pyHTML(it)}${sayBtn(it)}${it.english?" — "+esc(it.english):""}`];
   if(it.examples) ex.push(esc(it.examples) + (it.examplesEn ? ` <span style="color:var(--muted)">· ${esc(it.examplesEn)}</span>` : ""));
   const v = $("verdict"); v.className = "verdict show "+cls;
   v.innerHTML = `<b>${head}</b>${detail?`<div class="more">${detail}</div>`:""}<div class="more">${ex.join("<br>")}</div>`;
@@ -490,7 +607,8 @@ function endSession(silent){
   if(!sess || sess.saved) return; sess.saved = true;
   writers.forEach(w=>{ try{w.cancelQuiz();}catch(e){} });
   const total = sess.clean + sess.hinted + sess.failed;
-  if(total){ profile.sessions.push({ ts:Date.now(), list:sess.list, clean:sess.clean, hinted:sess.hinted, failed:sess.failed });
+  if(window.speechSynthesis) speechSynthesis.cancel();
+  if(total){ profile.sessions.push({ ts:Date.now(), type:sess.type, list:sess.list, clean:sess.clean, hinted:sess.hinted, failed:sess.failed });
     profile.sessions = profile.sessions.slice(-50); saveDB(); }
   if(silent) return;
   const pct = total ? Math.round(sess.clean/total*100) : 0;
@@ -501,13 +619,172 @@ function endSession(silent){
     <div class="row" style="margin-top:16px">
       ${sess.review.length ? `<button class="primary" id="sRetry">Drill these words</button>` : ""}
       <button id="sHome">Back to progress</button>
-    </div>`;
+      <button id="sSave">💾 Copy progress link</button>
+    </div>
+    <div class="dmsg" id="sMsg"></div>`;
   show("summary");
-  if(sess.review.length){ const r = sess.review.map(x=>x.it); $("sRetry").onclick = () => startDrill(r); }
+  $("sSave").onclick = () => copyProgressLink($("sMsg"));
+  if(sess.review.length){
+    const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false}])).values()];
+    $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : startDrill(r);
+  }
   $("sHome").onclick = () => renderHome();
 }
 
+/* ---------------- Tone colours and pronunciation ---------------- */
+const nChars = it => [...it.word].length;
+/* Pinyin coloured by tone; one syllable under each character when they line up. */
+function pyHTML(it, ruby){
+  const syl = it.pinyin && Pinyin.read(it.pinyin, nChars(it));
+  if(!syl) return esc(it.pinyin||"");
+  if(ruby && syl.length===nChars(it)){
+    const chars = [...it.word];
+    return `<span class="ruby" lang="zh-CN">${syl.map((s,i) => `<span class="rb"><b>${esc(chars[i])}</b><i class="t${s.t}">${esc(Pinyin.mark(s.l, s.t))}</i></span>`).join("")}</span>`;
+  }
+  return syl.map(s => `<span class="t${s.t}">${esc(Pinyin.mark(s.l, s.t))}</span>`).join("");
+}
+let zhVoice = null;
+function pickVoice(){ try{ const vs = speechSynthesis.getVoices(); zhVoice = vs.find(v => /^zh[-_]CN/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null; }catch(e){} }
+if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function say(text){
+  if(!window.speechSynthesis || !text) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text); u.lang = "zh-CN"; if(zhVoice) u.voice = zhVoice; u.rate = 0.8;
+  speechSynthesis.speak(u);
+}
+const sayBtn = it => window.speechSynthesis ? ` <button type="button" class="say" data-say="${esc(it.word)}" title="Hear it" aria-label="Hear ${esc(it.word)}">🔊</button>` : "";
+document.addEventListener("click", e => { const b = e.target.closest(".say"); if(b) say(b.dataset.say); });
+
+/* ---------------- Pinyin & tones drill ----------------
+   New words: a study card (see it, hear it, type it once), then a recall check per batch.
+   Answers: right first time = clean; right after a hint or a second try = hinted; otherwise missed.
+   Missed words come back a few cards later in the same session (practice only, not scored again). */
+let pst = null;
+function startPinyin(items, keepOrder){
+  audio();
+  profile.settings.shuffle = $("optShuffle").checked; saveDB();
+  deck = items.slice(); if(!keepOrder && profile.settings.shuffle) shuffle(deck);
+  idx = 0; sess = { type:"pinyin", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
+  show("pstage"); showPin();
+}
+function showPin(){
+  const it = deck[idx], study = it.phase==="learn";
+  pst = { tries:0, hinted:false, done:false };
+  $("qCount").textContent = `Word ${idx+1} of ${deck.length}`;
+  $("qScore").textContent = `${sess.clean} clean · ${sess.hinted} hinted · ${sess.failed} missed`;
+  $("qBar").style.width = (idx/deck.length*100)+"%";
+  $("qTag").textContent = study ? `📖 New word · ${it.section}` : it.again ? `🔁 Again · ${it.section}` : it.phase==="recall" ? `Recall check · ${it.section}` : it.section;
+  $("qWord").textContent = it.word;
+  $("qEn").textContent = it.english || "";
+  $("qStudy").hidden = !study;
+  if(study){
+    const syl = Pinyin.read(it.pinyin, nChars(it)) || [];
+    $("qStudy").innerHTML = `<div class="qans">${pyHTML(it, true)}${sayBtn(it)}</div>
+      <div class="sub">${syl.map(s => `<span class="t${s.t}">${esc(Pinyin.mark(s.l, s.t))}</span>: ${Pinyin.TONE_NAMES[s.t]}`).join(" · ")}</div>
+      <div class="sub" style="margin-top:6px">Say it out loud, then type it below to lock it in.</div>`;
+    if(profile.settings.sound) setTimeout(() => say(it.word), 250);
+  }
+  const inp = $("qIn"); inp.value = ""; inp.disabled = false; $("qPrev").innerHTML = "";
+  $("qVerdict").className = "verdict"; $("qVerdict").innerHTML = "";
+  $("qNext").classList.add("hidden");
+  $("qCheck").classList.remove("hidden"); $("qCheck").disabled = false;
+  $("qHint").classList.toggle("hidden", study); $("qHint").disabled = false;
+  $("qReveal").classList.toggle("hidden", study); $("qReveal").disabled = false;
+  inp.focus({preventScroll:true});
+}
+function pinPreview(){
+  const it = deck[idx], p = Pinyin.preview($("qIn").value, nChars(it));
+  $("qPrev").innerHTML = p ? p.map(x => `<span class="t${x.t}">${esc(x.text)}</span>`).join(" ") : "";
+}
+function pinAddKey(k){
+  const inp = $("qIn"); if(inp.disabled) return;
+  const a = inp.selectionStart ?? inp.value.length, b = inp.selectionEnd ?? a;
+  const ins = k==="v" ? "ü" : k;
+  inp.value = inp.value.slice(0,a) + ins + inp.value.slice(b);
+  inp.focus(); inp.setSelectionRange(a+ins.length, a+ins.length); pinPreview();
+}
+function pinHint(){
+  if(pst.done) return;
+  const it = deck[idx], syl = Pinyin.read(it.pinyin, nChars(it));
+  pst.hinted = true; $("qHint").disabled = true;
+  const v = $("qVerdict"); v.className = "verdict show info";
+  v.innerHTML = `<b>Spelling: ${syl ? syl.map(s => esc(Pinyin.mark(s.l, 0))).join(" · ") : esc(it.pinyin)}</b><div class="more">Now add the tones.</div>`;
+  $("qIn").focus();
+}
+function pinCheck(){
+  if(pst.done) return pinNext();
+  const it = deck[idx], input = $("qIn").value.trim();
+  if(!input){ $("qIn").focus(); return; }
+  const g = Pinyin.grade(it.pinyin, input, nChars(it));
+  if(it.phase==="learn"){                        // study card: just has to be typed correctly once
+    if(g.ok) return pinFinish("study");
+    return pinFeedback(g, "Not quite. Copy it from the card above.");
+  }
+  if(g.ok) return pinFinish(pst.tries || pst.hinted ? "hinted" : "clean");
+  pst.tries++;
+  if(pst.tries>=2) return pinFinish("failed", g);
+  pinFeedback(g, "Not quite. One more try.");
+}
+/* Say which syllables are wrong (spelling or tone) without giving the answer away. */
+function pinFeedback(g, head){
+  const it = deck[idx], chars = [...it.word];
+  let lines;
+  if(!g.got) lines = [`That doesn't split into ${g.want ? g.want.length : chars.length} syllable${chars.length===1?"":"s"}. Check the spelling.`];
+  else lines = g.syl.map((s,i) => {
+    const ch = chars.length===g.syl.length ? chars[i] : `syllable ${i+1}`;
+    if(s.letters && s.tone) return `✓ ${esc(ch)}`;
+    if(s.letters) return `✗ ${esc(ch)}: right sound, wrong tone (you wrote ${Pinyin.TONE_NAMES[s.got.t]})`;
+    return `✗ ${esc(ch)}: check the spelling`;
+  });
+  playSound("failed");
+  const v = $("qVerdict"); v.className = "verdict show warn";
+  v.innerHTML = `<b>${head}</b><div class="more">${lines.join("<br>")}</div>`;
+  $("qIn").focus(); $("qIn").select();
+}
+function pinFinish(result, g){
+  const it = deck[idx]; pst.done = true;
+  $("qIn").disabled = true; $("qHint").disabled = true; $("qReveal").disabled = true;
+  $("qCheck").classList.add("hidden");
+  const scored = result!=="study" && !it.again;
+  if(scored){ record(it.word, result, profile.pinyin); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); }
+  if(result!=="study") playSound(result);
+  if((result==="failed" || result==="hinted") && (it.again||0) < 2){   // bring it back a few cards later
+    deck.splice(Math.min(deck.length, idx+4), 0, {...it, phase:undefined, again:(it.again||0)+1});
+  }
+  const cls = { clean:"ok", study:"ok", hinted:"warn", failed:"bad" }[result];
+  const head = { clean:"✓ Correct!", study:"✓ Got it", hinted:"Correct, with help", failed:"✗ Not quite. Here's the answer" }[result];
+  let wrong = "";
+  if(g && g.got) wrong = g.syl.filter(s => s.letters && !s.tone).map(s => `${esc(Pinyin.mark(s.want.l, s.want.t))} is ${Pinyin.TONE_NAMES[s.want.t]}`).join("<br>");
+  const v = $("qVerdict"); v.className = "verdict show " + cls;
+  v.innerHTML = `<b>${head}</b><div class="more qans">${pyHTML(it, true)}${sayBtn(it)}</div>
+    ${wrong ? `<div class="more">${wrong}</div>` : ""}
+    ${it.examples && result!=="study" ? `<div class="more" style="color:var(--muted)">${esc(it.examples)}${it.examplesEn ? " · "+esc(it.examplesEn) : ""}</div>` : ""}`;
+  if(profile.settings.sound && result!=="study") setTimeout(() => say(it.word), 450);
+  $("qScore").textContent = `${sess.clean} clean · ${sess.hinted} hinted · ${sess.failed} missed`;
+  $("qBar").style.width = ((idx+1)/deck.length*100)+"%";
+  $("qNext").classList.remove("hidden"); $("qNext").textContent = idx+1>=deck.length ? "Finish" : "Next →";
+  $("qNext").focus({preventScroll:true});
+}
+function pinNext(){ idx++; if(idx>=deck.length) return endSession(false); showPin(); }
+function pinSkip(){
+  const it = deck[idx];
+  if(pst.done || it.phase==="learn") return pinNext();
+  pinFinish("failed");
+}
+function wirePinyin(){
+  $("qForm").onsubmit = e => { e.preventDefault(); pinCheck(); };
+  $("qIn").oninput = pinPreview;
+  document.querySelectorAll(".tones button").forEach(b => b.onclick = () => pinAddKey(b.dataset.k));
+  $("qCheck").onclick = pinCheck; $("qHint").onclick = pinHint; $("qReveal").onclick = () => { if(!pst.done) pinFinish("failed"); };
+  $("qSkip").onclick = pinSkip; $("qNext").onclick = pinNext;
+  $("qQuit").onclick = () => endSession(false);
+}
+
 /* ---------------- Wire up ---------------- */
+wirePinyin();
+$("optPractice").onchange = () => { profile.settings.practice = $("optPractice").value; saveDB(); syncPracticeUI(); renderHome(); };
+function syncPracticeUI(){ $("optPractice").value = profile.settings.practice || "write"; $("optPinyinLbl").hidden = isPinyinPractice(); }
+syncPracticeUI();
 $("listSel").onchange = e => { curList = allLists().find(l=>l.id===e.target.value); profile.settings.lastList = curList.id; saveDB(); renderHome(); };
 $("optMode").onchange = updateDeckInfo;
 $("optShuffle").onchange = () => { profile.settings.shuffle = $("optShuffle").checked; saveDB(); };
@@ -516,9 +793,14 @@ $("optPinyin").onchange = () => { profile.settings.pinyin = $("optPinyin").check
 $("start").onclick = startSession;
 $("bHint").onclick = useHint; $("bReveal").onclick = reveal; $("bRetry").onclick = redraw;
 $("bReplay").onclick = () => { if(learnStage===0) playWatch(); }; $("bSkip").onclick = skip; $("bNext").onclick = next; $("bQuit").onclick = () => endSession(false);
-document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("bNext").classList.contains("hidden") && document.activeElement.tagName!=="BUTTON" && document.activeElement.tagName!=="INPUT") next(); });
+document.addEventListener("keydown", e => { if(e.key==="Enter" && !$("stage").classList.contains("hidden") && !$("bNext").classList.contains("hidden") && document.activeElement.tagName!=="BUTTON" && document.activeElement.tagName!=="INPUT") next(); });
 
 $("resetBtn").onclick = resetProgress;
+$("bnCopy").onclick = () => copyProgressLink(null).then(ok => { if(ok) flash("✓ Progress link copied. Paste it somewhere safe: your notes, or an email to yourself.", "ok"); });
+$("flash").onclick = () => { $("flash").hidden = true; };
+wireSync();
+try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // ask the browser not to clear our data
 $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
 renderHome();                                   // shows the page immediately; lists fill in once loaded
+loadFromHash();
 loadSharedLists().then(() => { if(!$("screenHome").classList.contains("hidden")) renderHome(); });
