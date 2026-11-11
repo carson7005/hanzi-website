@@ -17,9 +17,19 @@ function startSession(){
 
 function record(word, result, map = profile.progress){      // result: clean | hinted | failed
   profile.backup.changes = (profile.backup.changes||0) + 1;
+  const key = PROGRESS_KEYS.find(k => profile[k]===map);      // another tab may have saved newer progress for this word
+  if(key){ try{ const saved = (JSON.parse(localStorage.getItem(STORE_KEY)||"null")||{})[key]||{}, o = saved[word];
+    if(o && (o.ts||0) > ((map[word]&&map[word].ts)||0)) map[word] = o; }catch(e){} }
   const s = map[word] || (map[word] = { seen:0, clean:0, hinted:0, failed:0, streak:0, last:null, ts:0 });
   s.seen++; s[result]++; s.last = result; s.ts = Date.now();
   s.streak = result==="clean" ? s.streak+1 : 0;
+}
+/* One line for the verdict: how close the word is to being mastered. */
+function streakNote(word, map){
+  const s = map[word]; if(!s) return "";
+  if(s.streak >= MASTER_STREAK) return s.streak===MASTER_STREAK ? "Mastered! 🎉" : `Mastered (${s.streak} clean in a row).`;
+  if(s.streak > 0) return `${MASTER_STREAK - s.streak===1 ? "One more clean round" : (MASTER_STREAK - s.streak)+" more clean rounds"} to master it.`;
+  return `Streak reset. Get it clean ${MASTER_STREAK} times in a row to master it.`;
 }
 
 function endSession(silent){
@@ -43,7 +53,10 @@ function endSession(silent){
   if($("gSignIn")) $("gSignIn").onclick = () => Cloud.signIn();
   if(sess.review.length){
     const r = [...new Map(sess.review.map(x => [x.it.word, {...x.it, phase:undefined, again:false, learned:false}])).values()];
-    $("sRetry").onclick = () => sess.type==="pinyin" ? startPinyin(r) : sess.type==="translate" ? startTranslate(r) : startDrill(r);
+    const t = sess.type, eng = sess.engine;
+    $("sRetry").onclick = () => t==="translate" ? startTranslate(r)
+      : t==="listen" ? (eng==="write" ? startDrill(r, false, "listen") : startPinyin(r, false, "listen"))
+      : t==="pinyin" ? startPinyin(r) : startDrill(r);
   }
   $("sHome").onclick = () => renderHome();
 }

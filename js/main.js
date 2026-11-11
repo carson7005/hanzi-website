@@ -47,6 +47,12 @@ $("wGuest").onclick = welcomeDone;
 $("welcomeDlg").addEventListener("cancel", welcomeDone);     // Esc counts as "continue as guest"
 try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // ask the browser not to clear our data
 $("optShuffle").checked = profile.settings.shuffle; $("optPinyin").checked = profile.settings.pinyin;
+/* Another tab saved progress: load it so this tab doesn't overwrite it with an older copy. */
+window.addEventListener("storage", e => {
+  if(e.key!==STORE_KEY || !e.newValue) return;
+  profile = loadState();
+  if(!$("screenHome").classList.contains("hidden")) renderHome();
+});
 renderHome();                                   // shows the page immediately; lists fill in once loaded
 if(typeof Cloud!=="undefined") Cloud.init();
 loadSharedLists().then(() => { if(!$("screenHome").classList.contains("hidden")) renderHome(); });

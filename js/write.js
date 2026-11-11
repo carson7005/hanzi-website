@@ -4,7 +4,7 @@ function startDrill(items, keepOrder, kind){            // kind "listen": prompt
   audio();   // unlock audio on user gesture
   profile.settings.shuffle = $("optShuffle").checked; profile.settings.pinyin = $("optPinyin").checked; saveDB();
   deck = items.slice(); if(!keepOrder && profile.settings.shuffle) shuffle(deck);
-  idx = 0; sess = { type: kind || "write", listen: kind==="listen", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
+  idx = 0; sess = { type: kind || "write", engine:"write", listen: kind==="listen", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
   show("stage"); showItem();
 }
 function boxSize(n){
@@ -205,7 +205,8 @@ function finishItem(){
     cls="ok"; result="clean"; head = st.mistakes===0 ? "✓ Correct — perfect!" : "✓ Correct";
     if(st.mistakes) detail = `Right character, with ${st.mistakes} wrong stroke attempt${st.mistakes===1?"":"s"} along the way.`;
   }
-  if(result){ record(it.word, result, mapFor(sess.type)); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); playSound(result); }
+  if(result){ record(it.word, result, mapFor(sess.type)); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); playSound(result);
+    detail = [detail, streakNote(it.word, mapFor(sess.type))].filter(Boolean).join("<br>"); }
   setLive("");
   const ex = [`<b style="font-size:20px;font-family:'Songti SC','Noto Serif CJK SC',serif;display:inline">${esc(it.word)}</b> &nbsp;${pyHTML(it)}${sayBtn(it)}${it.english?" — "+esc(it.english):""}`];
   if(it.examples) ex.push(esc(it.examples) + (it.examplesEn ? ` <span style="color:var(--muted)">· ${esc(it.examplesEn)}</span>` : ""));

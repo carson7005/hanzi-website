@@ -9,7 +9,7 @@ function startPinyin(items, keepOrder, kind){
   audio();
   profile.settings.shuffle = $("optShuffle").checked; saveDB();
   deck = items.slice(); if(!keepOrder && profile.settings.shuffle) shuffle(deck);
-  idx = 0; sess = { type: kind || "pinyin", listen: kind==="listen", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
+  idx = 0; sess = { type: kind || "pinyin", engine:"pinyin", listen: kind==="listen", list: curList ? curList.name : "", clean:0, hinted:0, failed:0, review:[], saved:false };
   show("pstage"); showPin();
 }
 function showPin(){
@@ -99,7 +99,8 @@ function pinFinish(result, g){
   const it = deck[idx]; pst.done = true;
   $("qIn").disabled = true; $("qHint").disabled = true; $("qReveal").disabled = true; $("qLearn").classList.add("hidden");
   $("qCheck").classList.add("hidden");
-  if(!it.again){ record(it.word, result, mapFor(sess.type)); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); }
+  let note = "";
+  if(!it.again){ record(it.word, result, mapFor(sess.type)); sess[result]++; if(result!=="clean") sess.review.push({it, result}); saveDB(); note = streakNote(it.word, mapFor(sess.type)); }
   playSound(result);
   if((result==="failed" || result==="hinted") && (it.again||0) < 2){   // bring it back a few cards later
     deck.splice(Math.min(deck.length, idx+4), 0, {...it, again:(it.again||0)+1});
@@ -112,6 +113,7 @@ function pinFinish(result, g){
   v.innerHTML = `<b>${head}</b><div class="more qans">${pyHTML(it, true)}${sayBtn(it)}</div>
     ${sess.listen && it.english ? `<div class="more">${esc(it.english)}</div>` : ""}
     ${wrong ? `<div class="more">${wrong}</div>` : ""}
+    ${note ? `<div class="more">${note}</div>` : ""}
     ${it.examples ? `<div class="more" style="color:var(--muted)">${esc(it.examples)}${it.examplesEn ? " · "+esc(it.examplesEn) : ""}</div>` : ""}`;
   if(profile.settings.sound && !sess.listen) sayLater(it.word, 450);
   $("qScore").textContent = `${sess.clean} clean · ${sess.hinted} hinted · ${sess.failed} missed`;

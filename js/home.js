@@ -66,7 +66,7 @@ function renderProgress(){
     const s = stat(i.word); let c = "";
     if(s) c = s.streak>=MASTER_STREAK ? "m" : (s.last==="failed" ? "f" : s.last==="hinted" ? "h" : "");
     const what = i.pinyin!==undefined ? `${i.pinyin} — ${i.english}` : i.english;
-    const tip = s ? `${what} · ${s.clean}/${s.seen} clean` : `${what} · not practiced`;
+    const tip = s ? `${what} · ${s.clean}/${s.seen} clean · ${s.streak} clean in a row (${MASTER_STREAK} = mastered)` : `${what} · not practiced`;
     const label = [...i.word].length>9 ? [...i.word].slice(0,8).join("")+"…" : i.word;
     return `<span class="w ${c}" title="${esc(tip)}">${esc(label)}</span>`;
   }).join("");
