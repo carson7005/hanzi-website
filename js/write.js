@@ -19,7 +19,7 @@ function showItem(){
   $("pBar").style.width = (idx/deck.length*100)+"%";
   $("secTag").textContent = it.learned ? "From memory, after learning · " + it.section : it.phase==="recall" ? "Recall check · " + it.section : it.section;
   if(sess.listen){
-    $("prompt").innerHTML = `<button type="button" class="play" id="bPlay">🔊 Play again</button>`;
+    $("prompt").innerHTML = `<button type="button" class="play" id="bPlay">${ICON_SPEAKER} Play again</button>`;
     $("hint").innerHTML = `Listen, then write it. <button type="button" class="linkbtn" id="bMeaning">Show meaning</button>`;
     $("bPlay").onclick = () => say(it.word);
     $("bMeaning").onclick = () => { $("hint").textContent = it.english || ""; };      // free: many words sound alike
@@ -60,14 +60,15 @@ function buildBoxes(fresh){
   if(fresh) itemState = { mistakes:0, hintsUsed:0, revealed:false, missing:[] };
   else { itemState.mistakes = 0; itemState.missing = []; }       // redraw keeps hints spent
   const ink = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#222";
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent2").trim() || "#b9a58c";
   chars.forEach((ch,i) => {
     const d = document.createElement("div"); d.className = "box";
     if(chars.length>1){ const t=document.createElement("span"); t.className="tag"; t.textContent=`${i+1}/${chars.length}`; d.appendChild(t); }
     host.appendChild(d); boxEls.push(d);
     writers.push(HanziWriter.create(d, ch, {
       width: sz-4, height: sz-4, padding: Math.round(sz*0.07),
-      showCharacter:false, showOutline:(learnStage===1||learnStage===2), strokeColor:ink, outlineColor:"rgba(170,160,205,0.28)",
-      highlightColor:"#c4b5fd", drawingColor:"#a78bfa", drawingWidth:Math.max(8,Math.round(sz/22)),
+      showCharacter:false, showOutline:(learnStage===1||learnStage===2), strokeColor:ink, outlineColor:"rgba(120,110,95,0.2)",
+      highlightColor:accent, drawingColor:accent, drawingWidth:Math.max(8,Math.round(sz/22)),
       strokeAnimationSpeed:1.2, delayBetweenStrokes:150,
       showHintAfterMisses:false,            // no automatic hints — hints are only on request
       highlightOnComplete:true
@@ -144,7 +145,7 @@ function setLearnUI(on){
 function enterLearnStage(){
   const it = deck[idx]; finished = false; watchToken++;
   setLearnUI(true);
-  $("secTag").textContent = `📖 Learn · step ${learnStage+1} of 3: ${STAGES[learnStage]}`;
+  $("secTag").textContent = `Learn · step ${learnStage+1} of 3: ${STAGES[learnStage]}`;
   $("hint").textContent = it.pinyin;
   const instr = ["Watch the stroke order. Replay as often as you like.", "Trace each stroke. The highlighted stroke is next.", "Now draw it from just the faint outline."][learnStage];
   const v = $("verdict"); v.className = "verdict show info";

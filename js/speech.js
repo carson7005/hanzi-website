@@ -25,5 +25,6 @@ function say(text){
 let sayTimer = null;
 function sayLater(text, ms){ clearTimeout(sayTimer); sayTimer = setTimeout(() => say(text), ms); }
 function stopSpeech(){ clearTimeout(sayTimer); try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){} }
-const sayBtn = it => window.speechSynthesis ? ` <button type="button" class="say" data-say="${esc(it.word)}" title="Hear it" aria-label="Hear ${esc(it.word)}">🔊</button>` : "";
+const ICON_SPEAKER = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>`;
+const sayBtn = it => window.speechSynthesis ? ` <button type="button" class="say" data-say="${esc(it.word)}" title="Hear it" aria-label="Hear ${esc(it.word)}">${ICON_SPEAKER}</button>` : "";
 document.addEventListener("click", e => { const b = e.target.closest(".say"); if(b) say(b.dataset.say); });

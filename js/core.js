@@ -128,8 +128,8 @@ function show(which){
   renderUserBar();
 }
 function renderUserBar(){
-  $("userBar").innerHTML = `<button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"🔔 Sound on":"🔕 Sound off"}</button>
-    ${typeof Cloud!=="undefined" && Cloud.enabled() ? `<button id="ubCloud" class="cloud ${Cloud.status()}" title="Sync progress across devices">${CLOUD_LABEL[Cloud.status()]||"☁️ Sync"}</button>` : ""}`;
+  $("userBar").innerHTML = `<button id="ubSound" aria-pressed="${profile.settings.sound}">${profile.settings.sound?"Sound on":"Sound off"}</button>
+    ${typeof Cloud!=="undefined" && Cloud.enabled() ? `<button id="ubCloud" class="cloud ${Cloud.status()}" title="Sync progress across devices">${CLOUD_LABEL[Cloud.status()]||"Sync"}</button>` : ""}`;
   if($("ubCloud")) $("ubCloud").onclick = openSync;
   $("ubSound").onclick = () => { profile.settings.sound = !profile.settings.sound; saveDB(); renderUserBar(); if(profile.settings.sound) playSound("clean"); };
 }
@@ -192,8 +192,8 @@ function mergeProgress(inc){
   return changed;
 }
 
-const CLOUD_LABEL = { off:"☁️ Sync", signedout:"☁️ Sign in to sync", syncing:"☁️ Syncing…", synced:"☁️ Synced", offline:"☁️ Offline", error:"☁️ Sync problem" };
-/* Cloud sync panel (opened from the ☁️ button). */
+const CLOUD_LABEL = { off:"Sync", signedout:"Sign in to sync", syncing:"Syncing…", synced:"Synced", offline:"Offline", error:"Sync problem" };
+/* Cloud sync panel (opened from the Sync button). */
 function renderCloudBox(){
   const box = $("cloudBox"); if(!box) return;
   if(typeof Cloud==="undefined" || !Cloud.enabled()){ box.hidden = true; return; }

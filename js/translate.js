@@ -74,7 +74,7 @@ function showTrans(){
   $("tCount").textContent = `Sentence ${idx+1} of ${deck.length}`;
   $("tScore").textContent = `${sess.clean} right · ${sess.hinted} with help · ${sess.failed} missed`;
   $("tBar").style.width = (idx/deck.length*100)+"%";
-  $("tTag").textContent = (it.again ? "🔁 Again · " : "") + it.section;
+  $("tTag").textContent = (it.again ? "Again · " : "") + it.section;
   $("tDir").textContent = toZh ? "Translate into Chinese" : "Translate into English";
   $("tPrompt").className = "tprompt" + (toZh ? "" : " zh");
   $("tPrompt").innerHTML = toZh ? esc(it.english) : `<span lang="zh-CN">${esc(it.word)}</span>${sayBtn(it)}`;

@@ -27,7 +27,7 @@ function record(word, result, map = profile.progress){      // result: clean | h
 /* One line for the verdict: how close the word is to being mastered. */
 function streakNote(word, map){
   const s = map[word]; if(!s) return "";
-  if(s.streak >= MASTER_STREAK) return s.streak===MASTER_STREAK ? "Mastered! 🎉" : `Mastered (${s.streak} clean in a row).`;
+  if(s.streak >= MASTER_STREAK) return s.streak===MASTER_STREAK ? "Mastered!" : `Mastered (${s.streak} clean in a row).`;
   if(s.streak > 0) return `${MASTER_STREAK - s.streak===1 ? "One more clean round" : (MASTER_STREAK - s.streak)+" more clean rounds"} to master it.`;
   return `Streak reset. Get it clean ${MASTER_STREAK} times in a row to master it.`;
 }

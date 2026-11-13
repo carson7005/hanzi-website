@@ -6,22 +6,22 @@
 <title>Chinese Practice</title>
 <meta name="apple-mobile-web-app-title" content="Chinese Practice">
 <meta name="application-name" content="Chinese Practice">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>中文 <span>Chinese Practice</span></h1>
+    <h1><span class="logo" aria-hidden="true">中</span> Chinese Practice</h1>
     <div class="row" id="userBar"></div>
   </header>
 
   <!-- Home: list picker + progress -->
   <div id="screenHome" class="hidden">
     <div class="tabs" id="optPractice" role="tablist" aria-label="What to practice">
-      <button role="tab" data-v="write"><span>✍️</span> Writing</button>
-      <button role="tab" data-v="pinyin"><span>🔤</span> Pinyin</button>
-      <button role="tab" data-v="translate"><span>🌐</span> Translate</button>
-      <button role="tab" data-v="listen"><span>🎧</span> Listen</button>
+      <button role="tab" data-v="write"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Writing</button>
+      <button role="tab" data-v="pinyin"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg> Pinyin</button>
+      <button role="tab" data-v="translate"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></svg> Translate</button>
+      <button role="tab" data-v="listen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg> Listen</button>
     </div>
     <p class="sub tabdesc" id="practiceDesc"></p>
     <section class="panel" aria-label="Setup">
@@ -68,7 +68,7 @@
     <div class="live" id="live"></div>
     <div class="verdict" id="verdict"></div>
     <div class="actions">
-      <button id="bLearn" class="learn">📖 Learn</button>
+      <button id="bLearn" class="learn">Learn</button>
       <button id="bHint">Hint (3)</button>
       <button id="bReveal">Show answer</button>
       <button id="bReplay" class="hidden">Replay</button>
@@ -104,7 +104,7 @@
     <div class="verdict" id="qVerdict" aria-live="polite"></div>
     <div class="actions">
       <button class="primary" id="qCheck">Check</button>
-      <button id="qLearn" class="learn">📖 Learn</button>
+      <button id="qLearn" class="learn">Learn</button>
       <button id="qHint">Hint: spelling</button>
       <button id="qReveal">Show answer</button>
       <button id="qSkip">Skip</button>
@@ -129,8 +129,8 @@
       <button class="primary" id="tCheck">Check</button>
       <button id="tHint">Hint: key words</button>
       <button id="tReveal">Show answer</button>
-      <button id="tRight" class="primary hidden">✓ Mine means the same</button>
-      <button id="tWrong" class="hidden">✗ I got it wrong</button>
+      <button id="tRight" class="primary hidden">Mine means the same</button>
+      <button id="tWrong" class="hidden">I got it wrong</button>
       <button id="tSkip">Skip</button>
       <button id="tNext" class="primary hidden">Next →</button>
       <button id="tQuit">End session</button>
@@ -147,11 +147,11 @@
   <p>Sign in to save your progress to the cloud, so it's there on every device: iPad, phone or computer.</p>
   <button class="primary wide" id="wSignIn">Sign in with Google</button>
   <button class="linkbtn" id="wGuest">Continue as guest</button>
-  <p class="sub">As a guest, progress stays in this browser. You can sign in any time with the ☁️ button and keep it.</p>
+  <p class="sub">As a guest, progress stays in this browser. You can sign in any time with the Sync button and keep it.</p>
 </dialog>
 
 <dialog id="syncDlg" aria-labelledby="dTitle">
-  <h2 class="sec" id="dTitle">☁️ Cloud sync</h2>
+  <h2 class="sec" id="dTitle">Cloud sync</h2>
   <div id="cloudBox" class="cloudbox" hidden></div>
   <div class="dmsg" id="dMsg" role="status"></div>
   <div class="row" style="justify-content:flex-end;margin-top:8px"><button id="dClose">Done</button></div>
@@ -164,14 +164,14 @@
 <script src="data.js?v=6"></script>
 <script src="firebase-config.js?v=8"></script>
 <script src="cloud.js?v=12"></script>
-<script src="js/core.js?v=12"></script>
+<script src="js/core.js?v=13"></script>
 <script src="js/lists.js?v=12"></script>
-<script src="js/speech.js?v=12"></script>
-<script src="js/home.js?v=12"></script>
-<script src="js/session.js?v=12"></script>
-<script src="js/write.js?v=12"></script>
-<script src="js/pinyin-drill.js?v=12"></script>
-<script src="js/translate.js?v=12"></script>
+<script src="js/speech.js?v=13"></script>
+<script src="js/home.js?v=13"></script>
+<script src="js/session.js?v=13"></script>
+<script src="js/write.js?v=13"></script>
+<script src="js/pinyin-drill.js?v=13"></script>
+<script src="js/translate.js?v=13"></script>
 <script src="js/main.js?v=12"></script>
 </body>
 </html>

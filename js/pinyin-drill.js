@@ -18,9 +18,9 @@ function showPin(){
   $("qCount").textContent = `Word ${idx+1} of ${deck.length}`;
   $("qScore").textContent = `${sess.clean} clean · ${sess.hinted} hinted · ${sess.failed} missed`;
   $("qBar").style.width = (idx/deck.length*100)+"%";
-  $("qTag").textContent = (it.again ? "🔁 Again · " : "") + it.section;
+  $("qTag").textContent = (it.again ? "Again · " : "") + it.section;
   if(sess.listen){
-    $("qWord").innerHTML = `<button type="button" class="play" id="qPlay">🔊 Play again</button>`;
+    $("qWord").innerHTML = `<button type="button" class="play" id="qPlay">${ICON_SPEAKER} Play again</button>`;
     $("qEn").textContent = "Type the pinyin you hear, tones included.";
     $("qPlay").onclick = () => say(it.word);
     sayLater(it.word, 300);

@@ -49,7 +49,7 @@ function updateDeckInfo(){
   let msg = "No vocab list found.";
   if(curList){
     msg = (mode==="learn" ? `${nNew} word${nNew===1?"":"s"} not practiced yet` : `${n} word${n===1?"":"s"} in this drill` + (nNew ? ` · ${nNew} not practiced yet` : ""))
-        + (isListenPractice() ? "" : " · press 📖 Learn on any word you don't know yet");
+        + (isListenPractice() ? "" : " · press Learn on any word you don't know yet");
     if(isListenPractice() && !window.speechSynthesis) msg = "This browser can't play speech, so Listen mode won't work here.";
   }
   $("deckInfo").textContent = msg;
